@@ -10,6 +10,15 @@ from streamlit.testing.v1 import AppTest
 APP_FILE = Path(__file__).resolve().parents[1] / "app.py"
 
 
+def route_result(question):
+    return {
+        "intent": "workplace",
+        "search_query": question,
+        "relationship": "new",
+        "resolved_question": question,
+    }
+
+
 class StreamlitUiTests(unittest.TestCase):
     question = "Нууцын баримт бичиг гэж юу вэ?"
 
@@ -28,7 +37,10 @@ class StreamlitUiTests(unittest.TestCase):
             "status": "answered",
         }
         with (
-            patch("rag.pipeline.classify_intent", return_value="workplace"),
+            patch(
+                "rag.pipeline.classify_intent",
+                return_value=route_result(self.question),
+            ),
             patch("rag.pipeline.search_documents", return_value=passages) as search,
             patch("rag.pipeline.generate_answer", return_value=generated) as generate,
         ):
@@ -49,7 +61,10 @@ class StreamlitUiTests(unittest.TestCase):
         langchain_module = ModuleType("langchain_openai")
         langchain_module.ChatOpenAI = Mock()
         with (
-            patch("rag.pipeline.classify_intent", return_value="workplace"),
+            patch(
+                "rag.pipeline.classify_intent",
+                return_value=route_result(self.question),
+            ),
             patch("rag.pipeline.search_documents", return_value=[]),
             patch.dict("sys.modules", {"langchain_openai": langchain_module}),
         ):
@@ -57,14 +72,20 @@ class StreamlitUiTests(unittest.TestCase):
             app.chat_input[0].set_value(self.question).run()
 
         self.assertFalse(app.exception)
-        self.assertIn("Өгсөн баримтуудаас энэ асуултад хангалттай мэдээлэл олдсонгүй.", [element.value for element in app.info])
+        self.assertIn(
+            "Өгсөн баримтуудаас энэ асуултад хангалттай мэдээлэл олдсонгүй.",
+            [element.value for element in app.info],
+        )
         langchain_module.ChatOpenAI.assert_not_called()
 
     def test_retrieval_errors_hide_exception_details(self):
         for error in (RuntimeError("OPENAI_API_KEY=secret"), OpenAIError("secret")):
             with self.subTest(error=type(error).__name__):
                 with (
-                    patch("rag.pipeline.classify_intent", return_value="workplace"),
+                    patch(
+                        "rag.pipeline.classify_intent",
+                        return_value=route_result(self.question),
+                    ),
                     patch("rag.pipeline.search_documents", side_effect=error),
                 ):
                     app = AppTest.from_file(str(APP_FILE)).run()
@@ -76,7 +97,10 @@ class StreamlitUiTests(unittest.TestCase):
 
     def test_generation_error_status_is_displayed_safely(self):
         with (
-            patch("rag.pipeline.classify_intent", return_value="workplace"),
+            patch(
+                "rag.pipeline.classify_intent",
+                return_value=route_result(self.question),
+            ),
             patch("rag.pipeline.search_documents", return_value=[]),
             patch(
                 "rag.pipeline.generate_answer",
@@ -93,6 +117,7 @@ class StreamlitUiTests(unittest.TestCase):
         cases = (
             ("salary_amount", "restricted", "warning"),
             ("general", "out_of_scope", "info"),
+            ("workplace", "clarification", "info"),
             ("greeting", "greeting", "markdown"),
         )
         for intent, status, element_name in cases:
@@ -114,7 +139,35 @@ class StreamlitUiTests(unittest.TestCase):
                     "greeting response" if status == "greeting" else f"{status} response",
                     [element.value for element in getattr(app, element_name)],
                 )
-                answer.assert_called_once_with(self.question)
+                answer.assert_called_once_with(self.question, history=[])
+
+    def test_streamlit_passes_recent_history_to_pipeline(self):
+        response = {
+            "answer": "Grounded answer",
+            "citations": [],
+            "status": "answered",
+            "passages": [],
+        }
+        with patch("ui.streamlit_ui.answer_question", return_value=response) as answer:
+            app = AppTest.from_file(str(APP_FILE)).run()
+            app.chat_input[0].set_value("Эхний асуулт").run()
+            app.chat_input[0].set_value("Тэгвэл яах вэ?").run()
+
+        self.assertFalse(app.exception)
+        self.assertEqual(answer.call_count, 2)
+        answer.assert_any_call("Эхний асуулт", history=[])
+        answer.assert_any_call(
+            "Тэгвэл яах вэ?",
+            history=[
+                {"role": "user", "content": "Эхний асуулт"},
+                {
+                    "role": "assistant",
+                    "content": "Grounded answer",
+                    "citations": [],
+                    "status": "answered",
+                },
+            ],
+        )
 
 
 if __name__ == "__main__":

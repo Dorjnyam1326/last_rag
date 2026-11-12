@@ -15,6 +15,8 @@ INTENT_LABELS = (
     "general",
     "greeting",
 )
+RELATIONSHIP_LABELS = ("new", "follow_up", "clarification")
+MAX_HISTORY_MESSAGES = 6
 
 _WORKPLACE_SCOPE_REFUSAL = (
     "Энэ туслах ажлын байрны бодлого, HR болон үйл ажиллагааны асуултад зориулагдсан."
@@ -59,6 +61,12 @@ class _RoutedRequest(BaseModel):
     search_query: str = Field(
         description="Ажлын сэдвээр хайхад зориулсан утгыг хадгалсан Монгол кирилл query"
     )
+    relationship: Literal[*RELATIONSHIP_LABELS] = Field(
+        description="Асуулт шинэ сэдэв, үргэлжлэл, эсвэл тодруулга шаардсан эсэх"
+    )
+    resolved_question: str = Field(
+        description="Follow-up бол context-тэй бүрэн асуулт; шинэ асуулт бол эх асуулт"
+    )
 
 
 def get_enabled_restriction(intent: str) -> dict | None:
@@ -74,8 +82,21 @@ def get_enabled_restriction(intent: str) -> dict | None:
     )
 
 
-def classify_intent(question: str) -> dict:
-    """Classify a request and return its search-only normalized query."""
+def _recent_history(history: list[dict] | None) -> list[tuple[str, str]]:
+    if not isinstance(history, list):
+        return []
+    return [
+        (message["role"], message["content"])
+        for message in history[-MAX_HISTORY_MESSAGES:]
+        if isinstance(message, dict)
+        and message.get("role") in {"user", "assistant"}
+        and isinstance(message.get("content"), str)
+        and message["content"].strip()
+    ]
+
+
+def classify_intent(question: str, history: list[dict] | None = None) -> dict:
+    """Classify, resolve relevant follow-up context, and normalize one request."""
     load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
     from langchain_openai import ChatOpenAI
 
@@ -83,7 +104,9 @@ def classify_intent(question: str) -> dict:
         f"{rule['id']}: {rule['description']}" for rule in RESTRICTION_RULES
     )
     system_prompt = (
-        "Асуултыг утгаар нь ганц ангилалд оруул. Кирилл Монгол, латин галигтай "
+        "Хамгийн сүүлийн human message бол одоогийн асуулт; түүнээс өмнөх user/assistant "
+        "messages нь хамгийн ихдээ хэдхэн recent conversation history юм. Асуултыг "
+        "утгаар нь ганц ангилалд оруул. Кирилл Монгол, латин галигтай "
         "Монгол болон English асуултыг тань. workplace нь ажлын байрны policy, "
         "HR, чөлөө, үйл ажиллагааны асуулт. salary_procedure нь цалин олгох "
         "хуваарь эсвэл цалин хянах/нэмүүлэх журам; энэ нь цалингийн дүнгээс "
@@ -96,15 +119,33 @@ def classify_intent(question: str) -> dict:
         "утгыг өөрчлөхгүй хэвээр үлдээж болно. Latin Mongolian, English, холимог "
         "эсвэл алдаатай бичвэрийг утгыг нь хадгалан хэвийн кирилл Монгол хэлээр "
         "буулга. Нэр, technical identifier, acronym, үүрэг/оролцогч, огноо, дүн, "
-        "үгүйсгэл болон нөхцөлийг хадгал. Эхэд байхгүй хугацаа, зөвшөөрлийн дүрэм, "
-        "хэлтэс эсвэл policy нөхцөл бүү нэм. 'neg chuluu awah' гэх тодорхойгүй "
+        "үгүйсгэл болон нөхцөлийг хадгал. Асуулт, history-д байхгүй role/actor, "
+        "огноо, хугацаа, зөвшөөрлийн зам, хэлтэс эсвэл policy нөхцөл бүү нэм. "
+        "'neg chuluu awah' гэх тодорхойгүй "
         "хэллэгийг хангалттай context байхгүй бол 'нэг өдрийн чөлөө' гэж бүү "
-        "тодруул. Хариулт бүү үүсгэ; зөвхөн schema-г буцаа."
+        "тодруул. Одоогийн асуулт дангаараа ойлгомжтой шинэ сэдэв бол history-г "
+        "үл тоож relationship=new, resolved_question-д эх асуултыг хэвээр өг. "
+        "Одоогийн асуулт өмнөх ярианд зайлшгүй тулгуурлавал зөвхөн холбогдох recent "
+        "контекстийг ашиглан relationship=follow_up, resolved_question-д бүрэн "
+        "утгатай асуулт өг; current follow-up-ийн үг хэллэгийг аль болох хэвээр "
+        "хадгалж, зөвхөн ойлгомжтой болгоход шаардлагатай context нэмж болно. "
+        "Сэдэв эсвэл заасан зүйл тодорхойгүй бол relationship="
+        "clarification, resolved_question болон search_query-г хоосон үлдээ. "
+        "Өмнөх assistant message нь зөвхөн ярианы context болохоос policy evidence "
+        "биш; түүнээс дүрэм, огноо, хугацаа, үүрэг, зөвшөөрлийн зам бүү ав. "
+        "Intent болон search_query-г шинэ үед одоогийн асуултаас, follow-up үед "
+        "resolved_question-оос гарга. Хариулт бүү үүсгэ; зөвхөн schema-г буцаа."
     )
 
+    messages = [("system", system_prompt), *_recent_history(history), ("human", question)]
     response = (
         ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-6-luna"), max_retries=0)
         .with_structured_output(_RoutedRequest, method="json_schema")
-        .invoke([("system", system_prompt), ("human", question)])
+        .invoke(messages)
     )
-    return {"intent": response.intent, "search_query": response.search_query}
+    return {
+        "intent": response.intent,
+        "search_query": response.search_query,
+        "relationship": response.relationship,
+        "resolved_question": response.resolved_question,
+    }
