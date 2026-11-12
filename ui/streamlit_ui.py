@@ -11,7 +11,7 @@ def render_app() -> None:
 
     if question:
         try:
-            results = answer_question(question)
+            result = answer_question(question)
         except RuntimeError:
             st.error("Vector Store-ийн тохиргоог шалгана уу.")
             return
@@ -19,13 +19,21 @@ def render_app() -> None:
             st.error("OpenAI хайлт амжилтгүй боллоо. API тохиргоо болон холболтоо шалгана уу.")
             return
 
-        if not results:
-            st.info("Хайлтаар тохирох баримт олдсонгүй.")
-            return
+        if result["status"] == "answered":
+            st.markdown(result["answer"])
+            if result["citations"]:
+                st.markdown("**Эх сурвалж**")
+                for citation in result["citations"]:
+                    st.caption(f"{citation['source_id']} · {citation['filename']}")
+        elif result["status"] == "insufficient":
+            st.info(result["answer"])
+        else:
+            st.error(result["answer"])
 
-        for result in results:
-            with st.container(border=True):
-                st.subheader(result["filename"])
-                if result.get("score") is not None:
-                    st.caption(f"Хамаарлын оноо: {result['score']}")
-                st.text(result["text"])
+        if result["passages"]:
+            with st.expander("Татсан баримтын хэсгүүд"):
+                for passage in result["passages"]:
+                    st.caption(passage["filename"])
+                    if passage.get("score") is not None:
+                        st.caption(f"Хамаарлын оноо: {passage['score']}")
+                    st.text(passage["text"])
