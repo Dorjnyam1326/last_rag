@@ -1,0 +1,16 @@
+.env
+.venv*/
+__pycache__/
+.streamlit/secrets.toml
+evaluation/
+!evaluation/
+evaluation/*
+!evaluation/retrieval_experiment/
+evaluation/retrieval_experiment/*
+!evaluation/retrieval_experiment/stage7.py
+!evaluation/retrieval_experiment/stage8.py
+!evaluation/retrieval_experiment/stage9.py
+!evaluation/retrieval_experiment/stage10.py
+!evaluation/retrieval_experiment/holdout_stage9.json
+!evaluation/retrieval_experiment/stage10_holdout.json
+!evaluation/retrieval_experiment/README.md
