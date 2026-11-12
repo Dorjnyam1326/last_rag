@@ -27,6 +27,12 @@ def render_app() -> None:
                     st.caption(f"{citation['source_id']} · {citation['filename']}")
         elif result["status"] == "insufficient":
             st.info(result["answer"])
+        elif result["status"] == "restricted":
+            st.warning(result["answer"])
+        elif result["status"] == "out_of_scope":
+            st.info(result["answer"])
+        elif result["status"] == "greeting":
+            st.write(result["answer"])
         else:
             st.error(result["answer"])
 

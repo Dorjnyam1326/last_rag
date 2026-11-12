@@ -28,6 +28,7 @@ class StreamlitUiTests(unittest.TestCase):
             "status": "answered",
         }
         with (
+            patch("rag.pipeline.classify_intent", return_value="workplace"),
             patch("rag.pipeline.search_documents", return_value=passages) as search,
             patch("rag.pipeline.generate_answer", return_value=generated) as generate,
         ):
@@ -48,6 +49,7 @@ class StreamlitUiTests(unittest.TestCase):
         langchain_module = ModuleType("langchain_openai")
         langchain_module.ChatOpenAI = Mock()
         with (
+            patch("rag.pipeline.classify_intent", return_value="workplace"),
             patch("rag.pipeline.search_documents", return_value=[]),
             patch.dict("sys.modules", {"langchain_openai": langchain_module}),
         ):
@@ -61,7 +63,10 @@ class StreamlitUiTests(unittest.TestCase):
     def test_retrieval_errors_hide_exception_details(self):
         for error in (RuntimeError("OPENAI_API_KEY=secret"), OpenAIError("secret")):
             with self.subTest(error=type(error).__name__):
-                with patch("rag.pipeline.search_documents", side_effect=error):
+                with (
+                    patch("rag.pipeline.classify_intent", return_value="workplace"),
+                    patch("rag.pipeline.search_documents", side_effect=error),
+                ):
                     app = AppTest.from_file(str(APP_FILE)).run()
                     app.chat_input[0].set_value(self.question).run()
                 messages = [element.value for element in app.error]
@@ -71,6 +76,7 @@ class StreamlitUiTests(unittest.TestCase):
 
     def test_generation_error_status_is_displayed_safely(self):
         with (
+            patch("rag.pipeline.classify_intent", return_value="workplace"),
             patch("rag.pipeline.search_documents", return_value=[]),
             patch(
                 "rag.pipeline.generate_answer",
@@ -82,6 +88,33 @@ class StreamlitUiTests(unittest.TestCase):
 
         self.assertFalse(app.exception)
         self.assertIn("Safe error", [element.value for element in app.error])
+
+    def test_routing_statuses_are_displayed_without_retrieval(self):
+        cases = (
+            ("salary_amount", "restricted", "warning"),
+            ("general", "out_of_scope", "info"),
+            ("greeting", "greeting", "markdown"),
+        )
+        for intent, status, element_name in cases:
+            with self.subTest(status=status):
+                response = {
+                    "answer": f"{status} response",
+                    "citations": [],
+                    "status": status,
+                    "passages": [],
+                }
+                with (
+                    patch("ui.streamlit_ui.answer_question", return_value=response) as answer,
+                ):
+                    app = AppTest.from_file(str(APP_FILE)).run()
+                    app.chat_input[0].set_value(self.question).run()
+
+                self.assertFalse(app.exception)
+                self.assertIn(
+                    "greeting response" if status == "greeting" else f"{status} response",
+                    [element.value for element in getattr(app, element_name)],
+                )
+                answer.assert_called_once_with(self.question)
 
 
 if __name__ == "__main__":
