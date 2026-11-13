@@ -12,14 +12,31 @@ def route_result(
     resolved_question=None,
 ):
     return {
-        "intent": intent,
-        "search_query": question if search_query is None else search_query,
-        "relationship": relationship,
-        "resolved_question": question if resolved_question is None else resolved_question,
+        "requests": [
+            {
+                "intent": intent,
+                "search_query": question if search_query is None else search_query,
+                "relationship": relationship,
+                "resolved_question": question if resolved_question is None else resolved_question,
+            }
+        ]
     }
 
 
 class AnswerQuestionTests(unittest.TestCase):
+    def setUp(self):
+        self.review_patcher = patch(
+            "rag.pipeline.review_evidence",
+            return_value={
+                "status": "sufficient",
+                "relevant_ids": [f"E{index}" for index in range(1, 11)],
+                "missing_information": "",
+                "retry_query": "",
+            },
+        )
+        self.review_patcher.start()
+        self.addCleanup(self.review_patcher.stop)
+
     def test_retrieves_then_generates_and_returns_passages(self):
         question = "Нууцын баримт бичиг гэж юу вэ?"
         passages = [
@@ -346,7 +363,7 @@ class AnswerQuestionTests(unittest.TestCase):
         for route in invalid_routes:
             with self.subTest(route=route):
                 with (
-                    patch("rag.pipeline.classify_intent", return_value=route),
+                    patch("rag.pipeline.classify_intent", return_value={"requests": [route]}),
                     patch("rag.pipeline.search_documents", return_value=[]) as search,
                     patch(
                         "rag.pipeline.generate_answer",
@@ -379,6 +396,345 @@ class AnswerQuestionTests(unittest.TestCase):
         self.assertEqual(result["passages"], [])
         search.assert_not_called()
         generate.assert_not_called()
+
+    def test_two_allowed_requests_keep_queries_answers_and_citations_separate(self):
+        leave = {
+            "intent": "workplace",
+            "search_query": "Чөлөө хэрхэн авах вэ?",
+            "relationship": "new",
+            "resolved_question": "Чөлөө яаж авах вэ?",
+        }
+        retention = {
+            "intent": "workplace",
+            "search_query": "Нууц баримтыг хэр удаан хадгалах вэ?",
+            "relationship": "new",
+            "resolved_question": "Нууц баримт бичгийг хэр удаан хадгалах вэ?",
+        }
+        passages = [
+            [{"file_id": "f1", "filename": "leave.pdf", "text": "leave"}],
+            [{"file_id": "f2", "filename": "security.pdf", "text": "retention"}],
+        ]
+        generated = [
+            {"answer": "Leave answer", "citations": [{"source_id": "D1", "filename": "leave.pdf"}], "status": "answered"},
+            {"answer": "Retention answer", "citations": [{"source_id": "D1", "filename": "security.pdf"}], "status": "answered"},
+        ]
+        with (
+            patch("rag.pipeline.classify_intent", return_value={"requests": [leave, retention]}) as classify,
+            patch("rag.pipeline.search_documents", side_effect=passages) as search,
+            patch("rag.pipeline.generate_answer", side_effect=generated) as generate,
+        ):
+            result = answer_question("Чөлөө яаж авах вэ? Мөн нууц баримтыг хэр удаан хадгалах вэ?")
+
+        classify.assert_called_once()
+        self.assertEqual(search.call_args_list[0].args[0], leave["search_query"])
+        self.assertEqual(search.call_args_list[1].args[0], retention["search_query"])
+        self.assertEqual(generate.call_args_list[0].args, (leave["resolved_question"], passages[0]))
+        self.assertEqual(generate.call_args_list[1].args, (retention["resolved_question"], passages[1]))
+        self.assertEqual([item["answer"] for item in result["results"]], ["Leave answer", "Retention answer"])
+        self.assertEqual([item["source_id"] for item in result["citations"]], ["R1-D1", "R2-D1"])
+        self.assertEqual([item["request_id"] for item in result["passages"]], ["R1", "R2"])
+
+    def test_allowed_and_restricted_requests_are_enforced_independently(self):
+        allowed = {
+            "intent": "workplace",
+            "search_query": "Чөлөө авах журам",
+            "relationship": "new",
+            "resolved_question": "Маргааш чөлөө яаж авах вэ?",
+        }
+        restricted = {
+            "intent": "salary_amount",
+            "search_query": "Миний цалин хэд вэ?",
+            "relationship": "new",
+            "resolved_question": "Миний цалин хэд вэ?",
+        }
+        with (
+            patch("rag.pipeline.classify_intent", return_value={"requests": [allowed, restricted]}),
+            patch("rag.pipeline.search_documents", return_value=[{"file_id": "f1", "filename": "leave.pdf", "text": "leave"}]) as search,
+            patch("rag.pipeline.generate_answer", return_value={"answer": "Leave answer", "citations": [], "status": "answered"}) as generate,
+        ):
+            result = answer_question("Маргааш чөлөө яаж авах вэ? Бас миний цалин хэд вэ?")
+
+        self.assertEqual([item["status"] for item in result["results"]], ["answered", "restricted"])
+        self.assertEqual(len(result["results"][1]["passages"]), 0)
+        search.assert_called_once_with(allowed["search_query"], limit=5)
+        generate.assert_called_once_with(allowed["resolved_question"], search.return_value)
+
+    def test_multiple_follow_ups_use_each_resolved_question(self):
+        requests = [
+            {
+                "intent": "workplace",
+                "search_query": "Чөлөө батлах хүн",
+                "relationship": "follow_up",
+                "resolved_question": "Эмчид үзүүлэх чөлөөг хэн батлах вэ?",
+            },
+            {
+                "intent": "workplace",
+                "search_query": "Чөлөө авахад шаардлагатай бичиг баримт",
+                "relationship": "follow_up",
+                "resolved_question": "Эмчид үзүүлэх чөлөө авахад ямар бичиг баримт хэрэгтэй вэ?",
+            },
+        ]
+        history = [{"role": "user", "content": "Эмчид үзүүлэх чөлөө авах журмыг тайлбарла."}]
+        with (
+            patch("rag.pipeline.classify_intent", return_value={"requests": requests}) as classify,
+            patch("rag.pipeline.search_documents", return_value=[]) as search,
+            patch("rag.pipeline.generate_answer", return_value={"answer": "Insufficient", "citations": [], "status": "insufficient"}) as generate,
+        ):
+            result = answer_question("Тэгвэл хэн батлах вэ, бас ямар бичиг баримт хэрэгтэй вэ?", history)
+
+        classify.assert_called_once_with("Тэгвэл хэн батлах вэ, бас ямар бичиг баримт хэрэгтэй вэ?", history)
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual([call.args[0] for call in generate.call_args_list], [item["resolved_question"] for item in requests])
+        self.assertEqual([item["status"] for item in result["results"]], ["insufficient", "insufficient"])
+
+    def test_more_than_three_or_uncertain_requests_returns_clarification_without_calls(self):
+        request = route_result("workplace", "Чөлөө яаж авах вэ?")["requests"][0]
+        cases = (
+            {"requests": [request] * 4},
+            {"requests": [request, {**request, "relationship": "clarification", "resolved_question": "", "search_query": ""}]},
+        )
+        for routing in cases:
+            with self.subTest(count=len(routing["requests"])):
+                with (
+                    patch("rag.pipeline.classify_intent", return_value=routing),
+                    patch("rag.pipeline.search_documents") as search,
+                    patch("rag.pipeline.generate_answer") as generate,
+                ):
+                    result = answer_question("Хэд хэдэн зүйл асууя.")
+
+                self.assertEqual(result["status"], "clarification")
+                search.assert_not_called()
+                generate.assert_not_called()
+
+    def test_one_multi_request_failure_does_not_hide_other_result(self):
+        requests = [
+            {
+                "intent": "workplace",
+                "search_query": "Нууц баримтын тодорхойлолт",
+                "relationship": "new",
+                "resolved_question": "Нууцын баримт бичиг гэж юу вэ?",
+            },
+            {
+                "intent": "workplace",
+                "search_query": "Чөлөө авах журам",
+                "relationship": "new",
+                "resolved_question": "Чөлөөг хэрхэн авах вэ?",
+            },
+        ]
+        passages = [{"file_id": "f1", "filename": "leave.pdf", "text": "leave"}]
+        with (
+            patch("rag.pipeline.classify_intent", return_value={"requests": requests}),
+            patch("rag.pipeline.search_documents", side_effect=[RuntimeError("secret"), passages]),
+            patch("rag.pipeline.generate_answer", return_value={"answer": "Leave answer", "citations": [], "status": "answered"}) as generate,
+        ):
+            result = answer_question("Нууцын баримт бичиг гэж юу вэ? Мөн чөлөөг хэрхэн авах вэ?")
+
+        self.assertEqual([item["status"] for item in result["results"]], ["error", "answered"])
+        self.assertNotIn("secret", result["results"][0]["answer"])
+        generate.assert_called_once_with(requests[1]["resolved_question"], passages)
+
+    def test_generation_failure_keeps_other_request_result(self):
+        requests = [
+            {
+                "intent": "workplace",
+                "search_query": "Нууц баримтын тодорхойлолт",
+                "relationship": "new",
+                "resolved_question": "Нууцын баримт бичиг гэж юу вэ?",
+            },
+            {
+                "intent": "workplace",
+                "search_query": "Чөлөө авах журам",
+                "relationship": "new",
+                "resolved_question": "Чөлөөг хэрхэн авах вэ?",
+            },
+        ]
+        passages = [{"file_id": "f1", "filename": "leave.pdf", "text": "leave"}]
+        with (
+            patch("rag.pipeline.classify_intent", return_value={"requests": requests}),
+            patch("rag.pipeline.search_documents", return_value=passages),
+            patch(
+                "rag.pipeline.generate_answer",
+                side_effect=[
+                    RuntimeError("secret"),
+                    {"answer": "Leave answer", "citations": [], "status": "answered"},
+                ],
+            ) as generate,
+        ):
+            result = answer_question("Нууцын баримт бичиг гэж юу вэ? Мөн чөлөөг хэрхэн авах вэ?")
+
+        self.assertEqual([item["status"] for item in result["results"]], ["error", "answered"])
+        self.assertNotIn("secret", result["results"][0]["answer"])
+        self.assertEqual(generate.call_count, 2)
+
+    def test_targeted_retry_deduplicates_and_keeps_initial_evidence(self):
+        question = "Нууцын баримт бичгийг хэдэн жил хадгалах вэ?"
+        first = {"file_id": "f1", "filename": "policy.pdf", "text": "Нууц баримтын ангилал."}
+        second = {"file_id": "f2", "filename": "retention.pdf", "text": "Хадгалах хугацааны хүснэгт."}
+        review = {
+            "status": "partial",
+            "relevant_ids": ["E1"],
+            "missing_information": "хадгалах хугацаа",
+            "retry_query": "Нууц баримт бичгийн хадгалах хугацаа",
+        }
+        complete_review = {
+            "status": "sufficient",
+            "relevant_ids": ["E1", "E2"],
+            "missing_information": "",
+            "retry_query": "",
+        }
+        with (
+            patch("rag.pipeline.classify_intent", return_value=route_result("workplace", question)),
+            patch("rag.pipeline.search_documents", side_effect=[[first], [first, second]]) as search,
+            patch("rag.pipeline.review_evidence", side_effect=[review, complete_review]) as evaluate,
+            patch("rag.pipeline.generate_answer", return_value={"answer": "Grounded", "citations": [], "status": "answered"}) as generate,
+        ):
+            result = answer_question(question)
+
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(search.call_args_list[1].args[0], review["retry_query"])
+        self.assertEqual(evaluate.call_count, 2)
+        generate.assert_called_once_with(question, [first, second])
+        self.assertEqual(result["passages"], [first, second])
+
+    def test_identical_retry_query_is_skipped_and_partial_status_is_passed(self):
+        question = "Нууц баримт хадгалах хугацаа?"
+        review = {
+            "status": "partial",
+            "relevant_ids": ["E1"],
+            "missing_information": "хадгалах хугацааны тоо",
+            "retry_query": "  Нууц   баримт хадгалах хугацаа? ",
+        }
+        passages = [{"file_id": "f1", "filename": "policy.pdf", "text": "Хугацаа тодорхойгүй."}]
+        with (
+            patch("rag.pipeline.classify_intent", return_value=route_result("workplace", question)),
+            patch("rag.pipeline.search_documents", return_value=passages) as search,
+            patch("rag.pipeline.review_evidence", return_value=review),
+            patch("rag.pipeline.generate_answer", return_value={"answer": "Partial", "citations": [], "status": "partially_answered"}) as generate,
+        ):
+            result = answer_question(question)
+
+        search.assert_called_once_with(question, limit=5)
+        generate.assert_called_once_with(
+            question,
+            passages,
+            evidence_status="partial",
+            missing_information=review["missing_information"],
+        )
+        self.assertEqual(result["status"], "partially_answered")
+
+    def test_review_failure_stops_without_generation(self):
+        question = "Нууцын баримт бичиг гэж юу вэ?"
+        passages = [{"file_id": "f1", "filename": "policy.pdf", "text": "passage"}]
+        with (
+            patch("rag.pipeline.classify_intent", return_value=route_result("workplace", question)),
+            patch("rag.pipeline.search_documents", return_value=passages) as search,
+            patch("rag.pipeline.review_evidence", return_value={"status": "error", "retry_query": ""}),
+            patch("rag.pipeline.generate_answer") as generate,
+        ):
+            result = answer_question(question)
+
+        search.assert_called_once_with(question, limit=5)
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["passages"], passages)
+        generate.assert_not_called()
+
+    def test_retry_search_failure_keeps_and_uses_initial_partial_evidence(self):
+        question = "Нууц баримтыг хэнтэй хуваалцах вэ?"
+        first = {"file_id": "f1", "filename": "security.pdf", "text": "Дотоод эрх бүхий ажилтанд."}
+        review = {
+            "status": "partial",
+            "relevant_ids": ["E1"],
+            "missing_information": "зөвшөөрлийн нөхцөл",
+            "retry_query": "Нууц баримт хуваалцах зөвшөөрлийн нөхцөл",
+        }
+        with (
+            patch("rag.pipeline.classify_intent", return_value=route_result("workplace", question)),
+            patch("rag.pipeline.search_documents", side_effect=[ [first], RuntimeError("retry failed") ]) as search,
+            patch("rag.pipeline.review_evidence", return_value=review) as evaluate,
+            patch("rag.pipeline.generate_answer", return_value={"answer": "Partial", "citations": [], "status": "partially_answered"}) as generate,
+        ):
+            result = answer_question(question)
+
+        self.assertEqual(search.call_count, 2)
+        evaluate.assert_called_once_with(question, [first])
+        generate.assert_called_once_with(
+            question,
+            [first],
+            evidence_status="partial",
+            missing_information=review["missing_information"],
+        )
+        self.assertEqual(result["passages"], [first])
+        self.assertEqual(result["status"], "partially_answered")
+
+    def test_retry_review_does_not_discard_initially_relevant_evidence(self):
+        question = "Нууц баримтыг хэнтэй хуваалцах вэ?"
+        first = {"file_id": "f1", "filename": "security.pdf", "text": "Дотоод эрх бүхий ажилтанд."}
+        additional = {"file_id": "f2", "filename": "other.pdf", "text": "Холбоогүй агуулга."}
+        with (
+            patch("rag.pipeline.classify_intent", return_value=route_result("workplace", question)),
+            patch("rag.pipeline.search_documents", side_effect=[[first], [additional]]),
+            patch(
+                "rag.pipeline.review_evidence",
+                side_effect=[
+                    {
+                        "status": "partial",
+                        "relevant_ids": ["E1"],
+                        "missing_information": "зөвшөөрлийн нөхцөл",
+                        "retry_query": "Нууц баримт хуваалцах зөвшөөрлийн нөхцөл",
+                    },
+                    {
+                        "status": "insufficient",
+                        "relevant_ids": [],
+                        "missing_information": "зөвшөөрлийн нөхцөл",
+                        "retry_query": "",
+                    },
+                ],
+            ),
+            patch("rag.pipeline.generate_answer", return_value={"answer": "Partial", "citations": [], "status": "partially_answered"}) as generate,
+        ):
+            result = answer_question(question)
+
+        generate.assert_called_once_with(
+            question,
+            [first],
+            evidence_status="partial",
+            missing_information="зөвшөөрлийн нөхцөл",
+        )
+        self.assertEqual(result["passages"], [first, additional])
+        self.assertEqual(result["status"], "partially_answered")
+
+    def test_retry_review_failure_keeps_initial_partial_evidence(self):
+        question = "Нууц баримтыг хэнтэй хуваалцах вэ?"
+        first = {"file_id": "f1", "filename": "security.pdf", "text": "Дотоод эрх бүхий ажилтанд."}
+        additional = {"file_id": "f2", "filename": "other.pdf", "text": "Шинэ хайлтын хэсэг."}
+        initial_review = {
+            "status": "partial",
+            "relevant_ids": ["E1"],
+            "missing_information": "зөвшөөрлийн нөхцөл",
+            "retry_query": "Нууц баримт хуваалцах зөвшөөрлийн нөхцөл",
+        }
+        with (
+            patch("rag.pipeline.classify_intent", return_value=route_result("workplace", question)),
+            patch("rag.pipeline.search_documents", side_effect=[[first], [additional]]),
+            patch(
+                "rag.pipeline.review_evidence",
+                side_effect=[initial_review, {"status": "error", "relevant_ids": []}],
+            ),
+            patch(
+                "rag.pipeline.generate_answer",
+                return_value={"answer": "Partial", "citations": [], "status": "partially_answered"},
+            ) as generate,
+        ):
+            result = answer_question(question)
+
+        generate.assert_called_once_with(
+            question,
+            [first],
+            evidence_status="partial",
+            missing_information="зөвшөөрлийн нөхцөл",
+        )
+        self.assertEqual(result["passages"], [first, additional])
+        self.assertEqual(result["status"], "partially_answered")
 
 
 if __name__ == "__main__":

@@ -14,3 +14,7 @@ evaluation/retrieval_experiment/*
 !evaluation/retrieval_experiment/holdout_stage9.json
 !evaluation/retrieval_experiment/stage10_holdout.json
 !evaluation/retrieval_experiment/README.md
+!evaluation/cases.json
+!evaluation/run_offline.py
+!evaluation/README.md
+!evaluation/run_live.py

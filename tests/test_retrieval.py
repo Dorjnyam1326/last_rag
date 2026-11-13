@@ -59,6 +59,7 @@ class SearchDocumentsTests(unittest.TestCase):
                 }
             ],
         )
+        self.openai_module.OpenAI.assert_called_once_with(timeout=45, max_retries=0)
         self.search.assert_called_once_with(
             vector_store_id="vs_from_dotenv",
             query="leave policy",

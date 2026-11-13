@@ -12,15 +12,32 @@ APP_FILE = Path(__file__).resolve().parents[1] / "app.py"
 
 def route_result(question):
     return {
-        "intent": "workplace",
-        "search_query": question,
-        "relationship": "new",
-        "resolved_question": question,
+        "requests": [
+            {
+                "intent": "workplace",
+                "search_query": question,
+                "relationship": "new",
+                "resolved_question": question,
+            }
+        ]
     }
 
 
 class StreamlitUiTests(unittest.TestCase):
     question = "Нууцын баримт бичиг гэж юу вэ?"
+
+    def setUp(self):
+        self.review_patcher = patch(
+            "rag.pipeline.review_evidence",
+            return_value={
+                "status": "sufficient",
+                "relevant_ids": [f"E{index}" for index in range(1, 11)],
+                "missing_information": "",
+                "retry_query": "",
+            },
+        )
+        self.review_patcher.start()
+        self.addCleanup(self.review_patcher.stop)
 
     def test_displays_answer_citations_and_passages_without_duplicate_calls(self):
         passages = [
@@ -119,6 +136,7 @@ class StreamlitUiTests(unittest.TestCase):
             ("general", "out_of_scope", "info"),
             ("workplace", "clarification", "info"),
             ("greeting", "greeting", "markdown"),
+            ("partially_answered", "partially_answered", "markdown"),
         )
         for intent, status, element_name in cases:
             with self.subTest(status=status):
@@ -139,6 +157,8 @@ class StreamlitUiTests(unittest.TestCase):
                     "greeting response" if status == "greeting" else f"{status} response",
                     [element.value for element in getattr(app, element_name)],
                 )
+                if status == "partially_answered":
+                    self.assertTrue(app.warning)
                 answer.assert_called_once_with(self.question, history=[])
 
     def test_streamlit_passes_recent_history_to_pipeline(self):
@@ -168,6 +188,47 @@ class StreamlitUiTests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_displays_grouped_answers_citations_and_passages(self):
+        result = {
+            "answer": "Leave answer\n\nRetention evidence is insufficient.",
+            "citations": [],
+            "status": "multi",
+            "passages": [],
+            "results": [
+                {
+                    "request_id": "R1",
+                    "question": "Чөлөө яаж авах вэ?",
+                    "answer": "Leave answer",
+                    "citations": [{"source_id": "R1-D1", "filename": "leave.pdf"}],
+                    "status": "answered",
+                    "passages": [{"filename": "leave.pdf", "text": "Leave passage", "score": 0.9}],
+                },
+                {
+                    "request_id": "R2",
+                    "question": "Баримтыг хэр удаан хадгалах вэ?",
+                    "answer": "Retention evidence is insufficient.",
+                    "citations": [],
+                    "status": "insufficient",
+                    "passages": [{"filename": "security.pdf", "text": "Retention passage", "score": 0.7}],
+                },
+            ],
+        }
+        with patch("ui.streamlit_ui.answer_question", return_value=result) as answer:
+            app = AppTest.from_file(str(APP_FILE)).run()
+            app.chat_input[0].set_value("Хоёр асуулт").run()
+
+            self.assertFalse(app.exception)
+            self.assertIn("Leave answer", [element.value for element in app.markdown])
+            self.assertIn("Retention evidence is insufficient.", [element.value for element in app.info])
+            self.assertIn("R1-D1 · leave.pdf", [element.value for element in app.caption])
+            self.assertNotIn("R2-D1 · security.pdf", [element.value for element in app.caption])
+            self.assertIn("Leave passage", [element.value for element in app.text])
+            self.assertIn("Retention passage", [element.value for element in app.text])
+            self.assertEqual(len(app.expander), 2)
+            app.run()
+
+        answer.assert_called_once_with("Хоёр асуулт", history=[])
 
 
 if __name__ == "__main__":
