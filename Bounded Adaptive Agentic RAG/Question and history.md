@@ -45,7 +45,7 @@ flowchart TD
 | **Output — target** | `RequestContext`: original болон optional prepared question, bounded history/candidates/evidence references, budget |
 | **Not here** | Translation, typo correction, semantic rewrite, follow-up шийдвэр, intent/policy, `resolved_question`, retrieval strategy, retrieval, answer generation |
 
-Энэ хүснэгтийн technical preprocessing нь **зорилтот contract**. Одоогийн `answer_question()` нь тусдаа empty/type/NFC validation алхамгүй; UI нь chat input-оос string авч Core руу дамжуулдаг. Одоогийн `classify_intent()` semantic normalization-ийг LLM prompt дотор хийдэг.
+Энэ хүснэгтийн technical preprocessing нь **зорилтот contract**. `answer_question()` одоо string төрлийг болон хоосон/whitespace-only утгыг Router дуудахаас өмнө шалгаж, valid эх асуултыг өөрчлөлгүй дамжуулна. Урт хязгаар, NFC болон whitespace preparation хараахан хийгдээгүй. Одоогийн `classify_intent()` semantic normalization-ийг LLM prompt дотор хийдэг.
 
 ## 3. Validation ба normalization-ийн зааг
 
@@ -116,6 +116,18 @@ flowchart TD
 > Одоогийн `refactor` нь сүүлийн зургаан мессежээр router ажиллуулж, follow-up үед **хамгийн сүүлийн assistant turn-ийн raw passages**-ийг дахин авч review хийдэг. `related_turn_ids`, older candidates, selected evidence reuse нь одоогоор **зорилтот дизайн**, хэрэгжсэн гэж үзэхгүй.
 
 Одоогийн UI raw `result["passages"]`-ийг bounded хэмжээгээр history-д хадгалж байна; reviewer-аар шүүсэн `result["evidence"]`-ийг биш. Дэлгэрэнгүй: [[QH - Evidence and provenance]].
+
+## Implementation status (as built)
+
+- Status: partial
+- Last checked: 2026-11-16
+- Git revision: `main` (uncommitted working tree)
+- Code owner: `rag/pipeline.py::answer_question`
+- Behavior verified: non-string input returns `error`; empty or whitespace-only input returns `clarification`; both stop before Router. Non-empty original question is passed unchanged.
+- Tests executed: 3 focused offline `unittest` cases passed; see `RAG_Implementation_Playbook.md`.
+- Limitations: no maximum-length check, NFC/text preparation, or history validation/context building.
+- Architecture deviations: none for this input-guard scope.
+- Next implementation step: Enhanced Router phase.
 
 ## Related
 

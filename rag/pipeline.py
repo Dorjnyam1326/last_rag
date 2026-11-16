@@ -154,6 +154,11 @@ def answer_question(
     model: str | None = None,
     api_key: str | None = None,
 ) -> dict:
+    if not isinstance(question, str):
+        return _result("Асуултыг текст хэлбэрээр оруулна уу.", "error")
+    if not question.strip():
+        return _result("Асуултаа бичнэ үү.", "clarification")
+
     if retrieval_provider is not None and eligible_file_ids is None:
         return _result("Баримтын хайлтын зөвшөөрөгдсөн хүрээ тохируулагдаагүй.", "error")
     if eligible_file_ids is not None and retrieval_provider is None:

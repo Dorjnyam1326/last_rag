@@ -54,6 +54,13 @@ Apply these principles to every change; they are constraints on **total codebase
 - Do not add retries, query variants, agents, rerankers, background jobs, databases, or caching without an explicit requirement and a measurable reason.
 - For each completed phase, the project should still run or the remaining blocker must be clearly identified.
 
+## Bounded Adaptive RAG workflow
+
+- For work guided by `Bounded Adaptive Agentic RAG/`, first read `RAG_Implementation_Playbook.md` and `RAG_Evaluation_and_Optimization.md`, then the architecture hub and relevant stage notes in pipeline order. Verify paths as they exist in this repository.
+- Treat design notes as target behavior, not proof of implementation. Inspect the code and tests, then summarize the code owners and gaps before changing anything.
+- Start with `PLAN_ONLY`; implement only one explicitly requested phase at a time. Keep the existing OpenAI Vector Store and use the old LangChain project as a read-only behavior reference.
+- Reuse existing evaluation fixtures; do not invent ground truth or describe unreviewed results as verified quality. Use offline checks first; make live API calls only when explicitly authorized.
+
 ## RAG correctness constraints
 
 When these features are implemented, preserve:

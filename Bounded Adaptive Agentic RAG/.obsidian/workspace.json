@@ -13,6 +13,20 @@
             "state": {
               "type": "markdown",
               "state": {
+                "file": "RAG_Evaluation_and_Optimization.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "RAG_Evaluation_and_Optimization"
+            }
+          },
+          {
+            "id": "2b7031c7d0523981",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
                 "file": "Bounded Adaptive Agentic RAG.md",
                 "mode": "source",
                 "source": false
@@ -21,7 +35,8 @@
               "title": "Bounded Adaptive Agentic RAG"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       },
       {
         "id": "6a41f86b77398fd1",
@@ -115,7 +130,6 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Bounded Adaptive Agentic RAG.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -134,7 +148,6 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "Bounded Adaptive Agentic RAG.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
@@ -177,7 +190,6 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Bounded Adaptive Agentic RAG.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -204,10 +216,12 @@
       "bases:Create new base": false
     }
   },
-  "active": "8ea55a18677eeb9f",
+  "active": "0198bf8c05808e8a",
   "lastOpenFiles": [
-    "Stages/Review updated evidence.md",
     "Bounded Adaptive Agentic RAG.md",
+    "RAG_Implementation_Playbook.md",
+    "RAG_Evaluation_and_Optimization.md",
+    "Stages/Review updated evidence.md",
     "Question and history.md",
     "Stages/Targeted retry within budget.md",
     "Stages/Evidence sufficient.md",
@@ -233,8 +247,6 @@
     "Stages/Enhanced Router/ER - Semantic normalization.md",
     "Stages/Enhanced Router/ER - Scope and contracts.md",
     "Stages/Enhanced Router",
-    "Stages/Retrieval capabilities.md",
-    "Question and history/QH - RequestContext contract.md",
-    "Question and history/QH - Evidence and provenance.md"
+    "Stages/Retrieval capabilities.md"
   ]
 }

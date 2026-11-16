@@ -52,7 +52,7 @@ status: accepted-design
 
 **Current implementation:** `classify_intent()` нь LLM-ээр `new/follow_up/clarification`, intent, `search_query`, `resolved_question` гаргана. `related_turn_ids`, `topic_id`, older-candidate resolution болон Agent Planner implementation байхгүй. UI history-г бүтнээр нь харуулж/хадгалдаг ч Router-д сүүлийн 6 message өгнө.
 
-`classify_intent()`-ийн prompt Latin Mongolian, English, mixed language, typo-г утгаар нь тайлбарлахыг чиглүүлдэг. Гэхдээ Question and History-ийн тусдаа deterministic input validation/NFC preprocessing одоогоор байхгүй; normalization quality regression-ээр баталгаажаагүй. `answer_question()` зарим router output field болон request count-ийг шалгадаг ч энэ нь semantic зөв байдлыг батлахгүй.
+`classify_intent()`-ийн prompt Latin Mongolian, English, mixed language, typo-г утгаар нь тайлбарлахыг чиглүүлдэг. `answer_question()` одоо non-string, empty, whitespace-only оролтыг Router-оос өмнө шалгана. Гэхдээ maximum-length check, Unicode NFC/text preparation болон normalization quality regression хараахан баталгаажаагүй. `answer_question()` зарим router output field болон request count-ийг шалгадаг ч энэ нь semantic зөв байдлыг батлахгүй.
 
 **Next:** [[Enhanced Router]]-ийн LLM structured output, reference-selection decision algorithm, error handling-ийг нарийвчилж батлах. Үүний дараа [[Agent Planner]]-ийг хэлэлцэнэ.
 

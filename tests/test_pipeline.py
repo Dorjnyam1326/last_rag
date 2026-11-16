@@ -37,6 +37,37 @@ class AnswerQuestionTests(unittest.TestCase):
         self.review_patcher.start()
         self.addCleanup(self.review_patcher.stop)
 
+    def test_non_text_question_returns_error_without_routing(self):
+        for question in (None, 123, b"question"):
+            with self.subTest(question=question):
+                with patch("rag.pipeline.classify_intent") as classify:
+                    result = answer_question(question)
+
+                self.assertEqual(result["status"], "error")
+                self.assertEqual(result["answer"], "Асуултыг текст хэлбэрээр оруулна уу.")
+                classify.assert_not_called()
+
+    def test_empty_or_whitespace_question_returns_clarification_without_routing(self):
+        for question in ("", " \t\n", "\u00a0"):
+            with self.subTest(question=question):
+                with patch("rag.pipeline.classify_intent") as classify:
+                    result = answer_question(question)
+
+                self.assertEqual(result["status"], "clarification")
+                self.assertEqual(result["answer"], "Асуултаа бичнэ үү.")
+                classify.assert_not_called()
+
+    def test_valid_question_is_passed_to_router_unchanged(self):
+        question = "  Асуулт хэвээр  "
+        with patch(
+            "rag.pipeline.classify_intent",
+            return_value=route_result("general", question),
+        ) as classify:
+            result = answer_question(question)
+
+        classify.assert_called_once_with(question, None, model=None, api_key=None)
+        self.assertEqual(result["status"], "out_of_scope")
+
     def test_retrieves_then_generates_and_returns_passages(self):
         question = "Нууцын баримт бичиг гэж юу вэ?"
         passages = [
