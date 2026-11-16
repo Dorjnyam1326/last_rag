@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # AP - PlanningProposal contract
 
@@ -13,9 +13,9 @@ PlanningProposal-ийн input/output contract, жишээ болон proposed/ru
 
 ## Input contract
 
-Planner нь [[Enhanced Router]]-ийн **validated `RouterResult`**-оос зөвхөн allowed retrieval request-үүдийг авна. Request тус бүрт `request_id`, `resolved_question`, шаардлагатай үед validated related-context metadata байна. Available capability болон read-only execution constraints-ийг хамт өгч болно.
+Planner нь [[Enhanced Router]]-ийн **validated `RouterResult`**-оос зөвхөн allowed retrieval request-үүдийг авна. Request тус бүрийн `resolved_question`-оос Planner хэрэгтэй input-аа авна; `request_id` Router field биш бөгөөд Python эх `requests[]`-ийн ordinal-аас онооно. Одоогийн implementation `related_turn_ids`-ийг input-д оруулахгүй. Available capability болон read-only execution constraints-ийг Selector-ийн integration-д тусад нь шийднэ.
 
-Intent, relationship, policy-г Planner дахин шийдэхгүй. `PlanningProposal` нь нэг independent request-д зориулагдана; олон allowed request бол request тус бүр өөр proposal авна.
+Intent, relationship, policy-г Planner дахин шийдэхгүй. `related_turn_ids` нь untrusted context metadata тул одоогийн implementation-д Planner input-оос хассан; evidence эсвэл authorization болгон ашиглахгүй. `PlanningProposal` нь нэг independent request-д зориулагдана; олон allowed request бол request тус бүр өөр proposal авна.
 
 
 ## Output — `PlanningProposal`
@@ -23,14 +23,18 @@ Intent, relationship, policy-г Planner дахин шийдэхгүй. `Planning
 ```json
 {
   "request_id": "R1",
-  "required_facts": ["Менежер эзгүй үед хэн зөвшөөрөх вэ?"],
-  "information_needs": ["Орлон зөвшөөрөх эрхийн журам"],
+  "required_facts": [
+    {"id": "F1", "description": "Менежер эзгүй үед хэн зөвшөөрөх вэ?"}
+  ],
+  "information_needs": [
+    {"id": "N1", "focus": "Орлон зөвшөөрөх эрхийн журам", "targets": ["F1"]}
+  ],
   "required_capabilities": ["focused_lookup"],
   "preferred_capabilities": ["multi_angle_coverage"]
 }
 ```
 
-Энэ бол proposed logical contract, runtime schema биш. Энэ нь **хайх шаардлага/зорилгын санал**; executable query-ууд болон сонгосон strategy агуулсангүй. [[Select search strategy]] capability ба registry-г шалгасны дараа тусдаа `SearchPlan` гаргана.
+Runtime нь энэ logical contract-ийг `rag/planning.py` доторх structured schema болон plain dictionary output-оор гаргана. `request_id`-г Python эх request-ийн дарааллаар өгч, model-оос ID зохиолгохгүй. Энэ нь **хайх шаардлага/зорилгын санал**; executable query болон сонгосон strategy агуулахгүй. [[Select search strategy]] дараагийн phase-д capability ба registry-г шалгаж тусдаа `SearchPlan` гаргана.
 
 ## Илүү дэлгэрэнгүй conceptual schema
 
@@ -50,11 +54,11 @@ Intent, relationship, policy-г Planner дахин шийдэхгүй. `Planning
 }
 ```
 
-Энэ JSON нь [[Retrieval capabilities]] дэх conceptual example-тэй ижил contract; бодит runtime schema биш.
+Энэ JSON нь runtime contract-ийн жишээ. Бодит structured schema болон deterministic validation нь `rag/planning.py`-д байна.
 
 | Field | Зорилго |
 |---|---|
-| `request_id` | Router-оос ирсэн independent request-ийн identity |
+| `request_id` | Python-оос эх `requests[]`-ийн ordinal-д тулгуурлан оноосон independent request identity |
 | `required_facts[]` | Батлах шаардлагатай fact-уудын `id`, тайлбар |
 | `information_needs[]` | Retrieval focus болон холбогдох fact ID (`targets`) |
 | `required_capabilities[]` | Хангах зайлшгүй retrieval behavior |
@@ -70,7 +74,14 @@ Selector-д дамжуулахын өмнө deterministic validation дараа�
 - Хайх шаардлага хоосон эсвэл утгагүй биш.
 - Proposal нь ганц allowed `request_id`-д хамаарсан; өөр request-ийн факт/constraint холилдоогүй.
 
-Энэ schema validation нь fact-ийн утгын зөв эсвэл retrieval capability үнэхээр ажиллахыг батлахгүй. Selector Registry/provider/budget-ийг тусад нь шалгана. Энэ нь proposed validation contract; implementation болон regression tests pending.
+Энэ validation нь ID, target mapping, capability vocabulary болон request isolation-ийг шалгана; fact-ийн утгын зөв эсвэл retrieval capability үнэхээр ажиллахыг батлахгүй. Selector Registry/provider/budget-ийг тусад нь шалгана.
+
+## Implementation status (as built)
+
+- Status: partial. `plan_requests()` allowed retrieval request бүрд нэг validated dictionary proposal буцаана. Router-аас ирсэн `policy`/`route`-д итгэхгүй; intent-ээс Python-д дахин тооцно.
+- Request ID: Python эх `requests[]`-ийн ordinal-аас `R1`–`R3` онооно. Restricted request алгасагдсан ч дараагийн ID pipeline-ийн request numbering-тэй таарна.
+- Verification: `tests.test_planning` 6 passed offline. 2026-11-16 live smoke-д нэг structured call хоёр allowed request (`R1`, `R2`)-д proposal буцааж, restricted `R3`-г хассан; шаардлагатай field, target болон capability шалгалт тэнцсэн.
+- Limit: Selector байхгүй тул proposal pipeline-д хэрэглэгдэхгүй; `answer_question()` public output-д нэмээгүй. Live smoke нь synthetic бөгөөд fact-ийн эх сурвалжийн үнэн зөвийг шалгаагүй.
 
 ## Contract-ийн зааг
 

@@ -21,7 +21,7 @@ status: accepted-design
 | QH-11 | Question taxonomy дөрвөн independent dimension-тэй | Relationship, intent/policy, structure, retrieval strategy-г нэг enum-д хутгахгүй |
 | QH-12 | Question and History semantic router биш | Зөвхөн input context/candidate бэлтгэнэ |
 | QH-13 | Existing router-ийг хадгалж enhance хийнэ | `classify_intent()`-ийг бүрэн солихгүй |
-| QH-14 | `related_turn_ids` нь proposal | Одоогийн runtime output биш; backend ID-г validate хийх зорилготой |
+| QH-14 | `related_turn_ids` нь Router-ийн per-request output | Supplied history allowlist-д Python validate хийнэ; session ownership-ийн баталгаа биш |
 | QH-15 | `topic_id` нь follow-up-ийн баталгаа биш | Ижил topic ба холбоотой turn өөр ойлголт |
 | QH-16 | `MAX_HISTORY_MESSAGES=6` эхний context limit хэвээр | UI-н бүх session history-г хадгалахтай зөрчилдөхгүй |
 | QH-17 | Older linked context нь recent window-ээс тусдаа candidate concept | 6 message-ээс хуучин context-ийг сонгож, validate хийсний дараа ачаална |
@@ -40,7 +40,7 @@ status: accepted-design
 
 ## Дараа шийдэх тохиргоо
 
-- Older candidate shortlist-ийн тоо, чанар, token budget.
+- Older candidate-ийн count 8, summary cap 240 characters нь эхний implementation setting; coverage, semantic чанар, нийт token budget-ийг цааш хэмжиж шалгах.
 - `topic_id` үүсгэх/өөрчлөх schema (Router-ийн output-той хамт).
 - Link confidence ба ambiguous үед clarification хийх бодлого.
 - Handoff-ийн exact Python `TypedDict` / Pydantic schema (implementation үед).
@@ -50,11 +50,11 @@ status: accepted-design
 
 **Done (design):** Context scope, limit, candidates, relation references, evidence separation, Router handoff, [[Question taxonomy]]-ийн дөрвөн хэмжээсийн boundary.
 
-**Current implementation:** `classify_intent()` нь LLM-ээр `new/follow_up/clarification`, intent, `search_query`, `resolved_question` гаргана. `related_turn_ids`, `topic_id`, older-candidate resolution болон Agent Planner implementation байхгүй. UI history-г бүтнээр нь харуулж/хадгалдаг ч Router-д сүүлийн 6 message өгнө.
+**Current implementation:** UI full session history болон user/assistant pair-ийн UUID turn ID хадгална. QH зургаан recent message ба найман хүртэлх older question summary бэлдэнэ. `classify_intent()` нэг structured call-аар `new/follow_up/clarification`, intent, `search_query`, `resolved_question`, per-request `related_turn_ids` гаргаж, Python ID-г input allowlist-аар шалгана. `topic_id`, semantic candidate ranking болон Agent Planner implementation байхгүй.
 
 `classify_intent()`-ийн prompt Latin Mongolian, English, mixed language, typo-г утгаар нь тайлбарлахыг чиглүүлдэг. `answer_question()` одоо non-string, empty, whitespace-only оролтыг Router-оос өмнө шалгана. Гэхдээ maximum-length check, Unicode NFC/text preparation болон normalization quality regression хараахан баталгаажаагүй. `answer_question()` зарим router output field болон request count-ийг шалгадаг ч энэ нь semantic зөв байдлыг батлахгүй.
 
-**Next:** [[Enhanced Router]]-ийн LLM structured output, reference-selection decision algorithm, error handling-ийг нарийвчилж батлах. Үүний дараа [[Agent Planner]]-ийг хэлэлцэнэ.
+**Next:** Session ownership болон request-scoped prior evidence/provenance-ийн бодит contract-ийг шийдэх; normalization ба referent accuracy-г source-verified evaluation-аар шалгах. Үүний дараа [[Agent Planner]] phase-г үргэлжлүүлнэ.
 
 ## Related
 

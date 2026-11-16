@@ -1,5 +1,6 @@
 from rag.generation import generate_answer, review_evidence
 from rag.retrieval import (
+    MAX_REUSABLE_PASSAGES,
     build_search_query,
     deduplicate_passages,
     previous_turn_passages,
@@ -9,8 +10,11 @@ from rag.routing import (
     INTENT_LABELS,
     MAX_ROUTED_REQUESTS,
     RELATIONSHIP_LABELS,
+    build_router_history_context,
     classify_intent,
     get_enabled_restriction,
+    get_policy_and_route,
+    prepare_history,
 )
 
 
@@ -37,6 +41,33 @@ def _search_passages(query: str, retrieval_provider, eligible_file_ids) -> list[
     )
 
 
+def _selected_turn_passages(
+    history: list[dict] | None,
+    related_turn_ids: list[str],
+    eligible_file_ids: frozenset[str] | None,
+) -> list[dict]:
+    if not isinstance(history, list):
+        return []
+
+    passages = []
+    for turn_id in related_turn_ids:
+        assistant_message = next(
+            (
+                message
+                for message in history
+                if isinstance(message, dict)
+                and message.get("role") == "assistant"
+                and message.get("turn_id") == turn_id
+            ),
+            None,
+        )
+        if assistant_message:
+            passages.extend(previous_turn_passages([assistant_message], eligible_file_ids))
+        if len(passages) >= MAX_REUSABLE_PASSAGES:
+            break
+    return deduplicate_passages(passages)[:MAX_REUSABLE_PASSAGES]
+
+
 def _process_request(
     request: dict,
     catch_errors: bool,
@@ -47,23 +78,25 @@ def _process_request(
     api_key: str | None = None,
 ) -> dict:
     intent = request["intent"]
-    restriction = get_enabled_restriction(intent)
-    if restriction:
+    policy_route = get_policy_and_route(intent)
+    if policy_route["policy"] == "restricted":
+        restriction = get_enabled_restriction(intent)
         return _result(restriction["response"], "restricted")
+    route = policy_route["route"]
 
     effective_question = request["resolved_question"]
     responses = {
-        "general": (
+        "out_of_scope": (
             "out_of_scope",
             "Энэ туслах зөвхөн ажлын байрны бодлого, HR болон үйл ажиллагааны сэдэвт тусална.",
         ),
-        "greeting": (
+        "direct": (
             "greeting",
             "Сайн байна уу! Ажлын байрны бодлого, HR эсвэл үйл ажиллагааны талаар асуугаарай.",
         ),
     }
-    if intent in responses:
-        status, answer = responses[intent]
+    if route in responses:
+        status, answer = responses[route]
         return _result(answer, status)
 
     search_query = request.get("search_query")
@@ -198,6 +231,23 @@ def answer_question(
     ):
         return _result("Асуултыг аюулгүй ангилж чадсангүй. Дахин оролдоно уу.", "error")
 
+    prepared_history = prepare_history(history)
+    _, _, allowed_turn_ids = build_router_history_context(prepared_history)
+    for request in requests:
+        related_turn_ids = request.get("related_turn_ids", [])
+        if (
+            not isinstance(related_turn_ids, list)
+            or any(not isinstance(turn_id, str) for turn_id in related_turn_ids)
+            or len(set(related_turn_ids)) != len(related_turn_ids)
+            or any(turn_id not in allowed_turn_ids for turn_id in related_turn_ids)
+            or (request["relationship"] == "follow_up" and not related_turn_ids)
+            or (request["relationship"] != "follow_up" and related_turn_ids)
+        ):
+            return _result(
+                "Асуултын холбоотой өмнөх яриаг баталгаажуулж чадсангүй. Тодруулна уу.",
+                "clarification",
+            )
+
     if any(request["relationship"] == "clarification" for request in requests):
         return _result(
             "Хүсэлтүүдийг найдвартай ялгаж чадсангүй. Асуултаа тодруулж эсвэл тус тусад нь илгээнэ үү.",
@@ -214,12 +264,15 @@ def answer_question(
             "clarification",
         )
 
-    previous_passages = previous_turn_passages(history, eligible_ids)
     if len(requests) == 1:
         return _process_request(
             requests[0],
             catch_errors=False,
-            previous_passages=previous_passages,
+            previous_passages=_selected_turn_passages(
+                prepared_history,
+                requests[0].get("related_turn_ids", []),
+                eligible_ids,
+            ),
             retrieval_provider=retrieval_provider,
             eligible_file_ids=eligible_ids,
             model=model,
@@ -232,7 +285,11 @@ def answer_question(
         result = _process_request(
             request,
             catch_errors=True,
-            previous_passages=previous_passages,
+            previous_passages=_selected_turn_passages(
+                prepared_history,
+                request.get("related_turn_ids", []),
+                eligible_ids,
+            ),
             retrieval_provider=retrieval_provider,
             eligible_file_ids=eligible_ids,
             model=model,

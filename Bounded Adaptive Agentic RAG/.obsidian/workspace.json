@@ -130,6 +130,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "Bounded Adaptive Agentic RAG.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -148,6 +149,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
+                "file": "Bounded Adaptive Agentic RAG.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
@@ -190,6 +192,7 @@
             "state": {
               "type": "outline",
               "state": {
+                "file": "Bounded Adaptive Agentic RAG.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -216,13 +219,22 @@
       "bases:Create new base": false
     }
   },
-  "active": "0198bf8c05808e8a",
+  "active": "2b7031c7d0523981",
   "lastOpenFiles": [
+    "Stages/Agent Planner/AP - Information needs and facts.md",
+    "Stages/Agent Planner.md",
     "Bounded Adaptive Agentic RAG.md",
     "RAG_Implementation_Playbook.md",
     "RAG_Evaluation_and_Optimization.md",
-    "Stages/Review updated evidence.md",
+    "Stages/Enhanced Router/ER - Intent and policy.md",
+    "Stages/Enhanced Router.md",
+    "Question and history/QH - Scope and contracts.md",
+    "Question and history/QH - Edge cases and tests.md",
+    "Question and history/QH - Design decisions.md",
     "Question and history.md",
+    "Question taxonomy.md",
+    "Question and history/QH - Context candidates.md",
+    "Stages/Review updated evidence.md",
     "Stages/Targeted retry within budget.md",
     "Stages/Evidence sufficient.md",
     "Stages/Dedup and Evidence review/DE - Evidence review.md",
@@ -230,23 +242,14 @@
     "Stages/Dedup and Evidence review",
     "Stages/Retrieval.md",
     "Stages/Select search strategy.md",
-    "Stages/Agent Planner.md",
-    "Stages/Enhanced Router.md",
     "Stages/Select search strategy/SS - SearchPlan and validation.md",
     "Stages/Select search strategy/SS - Budget and fallback.md",
     "Stages/Select search strategy/SS - Single and Multi Query.md",
     "Stages/Select search strategy/SS - Registry and matching.md",
     "Stages/Select search strategy",
-    "Stages/Agent Planner/AP - Information needs and facts.md",
     "Stages/Agent Planner/AP - PlanningProposal contract.md",
     "Stages/Agent Planner/AP - Capability planning.md",
     "Stages/Agent Planner",
-    "Stages/Enhanced Router/ER - Validation and edge cases.md",
-    "Stages/Enhanced Router/ER - Intent and policy.md",
-    "Stages/Enhanced Router/ER - Relationship and references.md",
-    "Stages/Enhanced Router/ER - Semantic normalization.md",
-    "Stages/Enhanced Router/ER - Scope and contracts.md",
-    "Stages/Enhanced Router",
-    "Stages/Retrieval capabilities.md"
+    "Stages/Enhanced Router"
   ]
 }

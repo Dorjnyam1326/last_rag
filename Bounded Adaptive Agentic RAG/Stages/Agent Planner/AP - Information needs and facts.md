@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # AP - Information needs and facts
 
@@ -16,7 +16,7 @@ Resolved request-ээс required facts, information needs, dependencies гарг
 
 - Enhanced Router-ийн **validated** `RouterResult` болон allowed retrieval request-үүд.
 - Request тус бүрийн `resolved_question`.
-- Шаардлагатай үед зөвшөөрөгдсөн previous-turn context metadata.
+- Одоогийн implementation previous-turn context болон `related_turn_ids`-ийг Planner input-д дамжуулахгүй. Хожим metadata дамжуулсан ч untrusted context гэж үзэх бөгөөд evidence эсвэл authorization болохгүй.
 - Боломжит capability-ийн canonical жагсаалт: [[Retrieval capabilities]].
 - Read-only execution constraints болон request/message budget-ийн context.
 
@@ -57,6 +57,13 @@ Resolved question: `Менежер эзгүй үед 3 цагийн чөлөөг
 ## Хязгаар ба uncertainty
 
 Хэрэглэгчийн асуултанд байхгүй actor, хугацаа, policy нөхцөлийг нэмж fact болгохгүй. Required fact-ийн утга тодорхойгүй бол Router-ийн clarification эсвэл planning limitation boundary руу буцаана; таамгаар query зорилго бүрдүүлэхгүй.
+
+## Implementation status (as built)
+
+- Status: partial. `plan_requests()` нэг request-ийн `resolved_question`-оос required facts болон information needs гаргах structured Planner call ашиглана. Need бүрийн `targets` нь тухайн proposal-ийн fact ID байхыг Python validate хийнэ.
+- Input-д `related_turn_ids`, prior raw passages, Router-ийн policy/route санал дамжуулахгүй. Fact ба need нь request ID-аар тусгаарлагдана.
+- Verification: offline tests single-fact planning, нэг request доторх олон fact/need mapping, multi-request isolation болон invalid target-уудыг шалгана (`tests.test_planning`: 6 passed). 2026-11-16 live smoke-д хоёр synthetic request тус бүр нэг fact/need гаргаж, target mapping validation давсан.
+- Limits: live smoke-ийн fact/need-үүд эх сурвалжтай тулгагдаагүй тул semantic чанар батлагдаагүй; Planner pipeline-д хараахан холбогдоогүй.
 
 ## Navigation
 

@@ -1,22 +1,24 @@
 ---
 tags: [rag, tests, context, validation]
-status: proposed-acceptance
+status: design-finalized-implementation-partial
 ---
 # QH - Edge cases and tests
 
 ## Минимум acceptance checklist
 
-- [ ] **Original preserved**: `3n tsagiin chuluu` original хэвээр, `resolved_question`-д л орчуулга хийнэ.
-- [ ] **Window**: UI → Core-д хамгийн ихдээ сүүлийн 6 detailed messages дамжина.
+- [x] **Original preserved**: хүчинтэй original question Router-д өөрчлөлтгүй дамжина (offline test).
+- [x] **Window**: Router руу хамгийн ихдээ сүүлийн 6 detailed messages дамжина (offline test).
+- [x] **Input guard**: non-text асуулт `error`, empty/whitespace-only асуулт `clarification` болж Router call хийхгүй (offline tests).
 - [ ] **Chronological roles**: user/assistant роль болон дараалал алдагдахгүй.
 - [ ] **Immediate follow-up**: `хэн зөвшөөрөх вэ?` → өмнөх чөлөөний turn.
-- [ ] **Older follow-up**: A/B/C/D/E үед E → B, буруу E → D биш (B candidate-д байвал).
+- [x] **Older candidate catalogue**: Recent window-ээс гаднах хамгийн сүүлийн 8 user-question summary chronological байдлаар Router input-д орно (offline test). A/B/C/D/E дээр Router B-г зөв сонгох semantic чанар хараахан шалгагдаагүй.
 - [ ] **New topic**: чөлөөнөөс ethics рүү шилжихэд өмнөх чөлөөний evidence-ийг reuse хийхгүй.
 - [ ] **Same topic independent**: ижил HR topic ч өөр policy section байвал хүчээр холбохгүй.
 - [ ] **Correction**: `4 биш 3 цаг` үед шинэ constraint-ийг хадгална.
 - [ ] **Ambiguous referent**: хоёр боломжит хүсэлт байвал clarification.
 - [ ] **Multi-intent**: R1/R2/R3 тусдаа related_turn_ids.
-- [ ] **Invalid IDs**: LLM-ийн зөвшөөрөгдөөгүй, future, cross-session ID-г reject.
+- [x] **Invalid candidate IDs**: Supplied allowlist-д байхгүй ID-г reject/clarification болгоно (offline tests). Future/cross-session authorization тусдаа шалгагдахгүй.
+- [x] **Selected-turn isolation**: Сонгоогүй turn-ийн passages reuse болохгүй (offline pipeline test).
 - [ ] **Deleted/outdated evidence**: хуучин version эсвэл missing file-г unquestioned truth гэж үзэхгүй.
 - [ ] **No raw contamination**: irrelevance-тэй Top-5 raw passage history evidence болж орохгүй.
 - [ ] **Citation identity**: `[D1]`-ийг stable file/chunk ID гэж ашиглахгүй.
@@ -43,7 +45,7 @@ status: proposed-acceptance
 
 ## Validation ба normalization test matrix (proposed)
 
-Доорх нь regression test-ийн санал; одоогоор хэрэгжүүлсэн эсвэл ажиллуулсан test гэж үзэхгүй. Technical cases нь Question and History, semantic cases нь [[Enhanced Router]]-ийн behavior-ийг шалгана.
+Доорх матрицын ихэнх мөр regression test-ийн санал хэвээр. 2026-11-16-нд input guard, original-question preservation, six-message context, eight older-candidate bound, invalid candidate ID болон selected-turn passage isolation-ийн offline test-үүд ажилласан; бусад technical ба semantic case-уудыг хэрэгжүүлсэн гэж үзэхгүй. Semantic cases нь [[Enhanced Router]]-ийн behavior-ийг шалгана.
 
 | Input | Expected behavior | Failure risk |
 |---|---|---|
@@ -70,6 +72,12 @@ status: proposed-acceptance
 Эдгээр нь acceptance criteria болохоос implementation баталгаажуулалт биш. Output schema validation-ийг semantic preservation-ийн test гэж тооцохгүй.
 
 Эхний ээлжинд хэдхэн шууд жишээгээр context parity шалгаад, өмнөх **10 асуултын regression**-ээр сайн ажиллаж байсан answer behavior өөрчлөгдөөгүйг харна. Энэ нь production-ийн бүх нөхцөлийг батлахгүй.
+
+## Implementation status (as built)
+
+- Verified offline: `tests.test_routing` 7 passed; 15 focused `AnswerQuestionTests` passed; full-history UI ID test 1 passed (2026-11-16).
+- Broader check: `tests.test_pipeline.AnswerQuestionTests` 33 tests, 11 failures. Failures include older mock call assertions omitting `model=None`/`api_key=None`, a deduplication expectation missing `source_provenance`, and a multi-request mock citation missing `file_id`; candidate-specific focused tests passed. These unrelated assertions/fixtures were not rewritten as part of this phase.
+- Remaining acceptance gaps: semantic A/B/C/D/E choice, ambiguous references, correction fidelity, per-request old-evidence isolation, session ownership, and reviewed-evidence provenance.
 
 ## Related
 

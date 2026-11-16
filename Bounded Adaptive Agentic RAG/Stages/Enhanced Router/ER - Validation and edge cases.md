@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # ER - Validation and edge cases
 
@@ -23,7 +23,7 @@ Structured Router output validation, safe fallback болон routing edge cases
 
 Input validation нь **semantic understanding хийхгүй**. Output schema validation нь бүтэц ба зөвшөөрөгдсөн утгыг шалгах боловч `resolved_question` утгын хувьд зөв, meaning хадгалсан гэдгийг батлахгүй. Энэ distinction-ийг normalization regression test-ээр тусад нь баталгаажуулна.
 
-Одоогийн `answer_question()` нь router output-ийн `requests`, request count, intent, relationship, `resolved_question`-ийг шалгадаг. Current runtime output schema-д `policy`, `route`, `related_turn_ids` байхгүй тул тэдгээрийн validation нь proposed design; бүрэн хэрэгжсэн гэж бичихгүй.
+Одоогийн `answer_question()` нь router output-ийн `requests`, request count, intent, relationship, `resolved_question`, `related_turn_ids`-ийг шалгана. `policy`, `route` нь model schema-д орохгүй; backend validated intent-ээс deterministic байдлаар гаргаж, pipeline дахин тооцно. `related_turn_ids` нь зөвхөн Router-д өгсөн recent/candidate ID allowlist-д байх ёстой.
 
 Router output-ийг deterministic Python талд шалгана:
 
@@ -48,6 +48,12 @@ Malformed output эсвэл invalid reference дээр буруу context-ийг
 7. `Өмнөх хоёр журмын ялгаа юу вэ?` → cross-reference, хэд хэдэн `related_turn_ids`.
 8. `Тэр хүсэлтийг хаана гаргах вэ?` → хэд хэдэн боломжит referent байвал clarification.
 9. `Ээлжийн амралт хэд хоног вэ?` → бие даасан асуулт бол `new`; сэдэв ижил гэдгээр follow-up болохгүй.
+
+## Implementation status (as built)
+
+- Status: partial. Structured schema constrains intent/relationship/ID types; pipeline validates request list/count, labels, nonblank `resolved_question`, unique allowlisted turn IDs, and relationship-to-ID consistency. Invalid references fail closed to clarification.
+- Verified: `tests.test_routing` (7 passed) and 15 focused `AnswerQuestionTests` cover absent history, bounded candidates, original-question guard, ID rejection, selected-turn isolation, restrictions, and valid pipeline flow (2026-11-16; offline mocks).
+- Limits: structural validation cannot prove `resolved_question` or selected referent is semantically correct. Allowlist validation does not establish session ownership, creation time, or future-turn authorization; no `session_id` is carried.
 
 ## Navigation
 

@@ -1,12 +1,12 @@
 ---
 tags: [rag, evidence, provenance, citations]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # QH - Evidence and provenance
 
 ## Асуудал: Raw passages vs selected evidence
 
-Одоогийн Streamlit замд `result["passages"][:5]` history-д хадгалагдаж байгаа. Гэтэл pipeline review хийсэн `result["evidence"]` талбар гаргадаг. Raw Top-5 дотор хамгийн өндөр score-той **IT change management** passage ч чөлөөний асуултад орж ирсэн жишээ байгаа.
+Одоогийн Streamlit замд `result["passages"][:5]` history-д хадгалагдаж байгаа. Follow-up үед Router сонгосон turn-ийн эдгээр raw passages л pipeline-д авч reviewer дахин шалгана; `result["evidence"]` history-д хадгалагдахгүй. Raw Top-5 дотор хамгийн өндөр score-той **IT change management** passage ч чөлөөний асуултад орж ирсэн жишээ байгаа.
 
 **Target design:** өмнөх turn-ээс **review-д хамааралтай гэж сонгогдсон evidence**-ийг source identity-тай нь хадгалах. Хариултад cited болсон эсэхийг тусдаа тэмдэглэнэ.
 
@@ -44,7 +44,13 @@ flowchart TD
 
 ## Loading policy
 
-Router `related_turn_ids` сонгосны дараа код зөвхөн тэр turn-ийн selected evidence-ийг context candidate хэлбэрээр авч болно. **Шууд generation-д баталгаатай гэж оруулахгүй;** шинэ retrieval-ийн evidence-тэй хамт reviewer-т өгнө.
+Router `related_turn_ids` сонгосны дараа одоогийн код тухайн turn-д хадгалсан bounded raw passages-ийг шинэ retrieval-ийн хамт reviewer-т өгдөг. **Энэ нь selected evidence-ийг хадгалахтай адил биш**; generation өмнөх answer-ийг эх сурвалж гэж шууд итгэмжлэхгүй.
+
+## Implementation status (as built)
+
+- Status: partial. `answer_question()` зөвхөн selected turn ID-уудын assistant message-ээс passages авч, eligibility/type/text-ийг `previous_turn_passages()`-аар шалгаж, deduplicate хийн reviewer-т дахин өгнө.
+- Verified: `tests.test_pipeline.AnswerQuestionTests.test_follow_up_reuses_passages_only_from_selected_older_turn` сонгосон older candidate turn-ийн passage орж, сүүлийн хамааралгүй turn-ийн passage хасагдахыг батална.
+- Limits: UI raw passages хадгалдаг; reviewed evidence, stable chunk/version identity, citation-to-evidence provenance, per-request evidence isolation байхгүй. Хуучин source eligibility-г зөвхөн одоогийн eligible file IDs өгсөн тохиолдолд дахин шалгана.
 
 Multi-intent message дээр evidence record бүр `request_id`-тай; restricted R3-ийн source-ийг allowed R1-ийн context-д оруулахгүй.
 

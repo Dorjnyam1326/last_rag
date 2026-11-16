@@ -1,6 +1,6 @@
 ---
 tags: [rag, context, api-contract]
-status: proposed-contract
+status: design-finalized-implementation-partial
 ---
 # QH - RequestContext contract
 
@@ -24,7 +24,7 @@ flowchart LR
     class E internal-link;
 ```
 
-Recent context одоогоор `MAX_HISTORY_MESSAGES=6`. Session-д байгаа бүх мессежийг Router руу өгөхгүй. `related_turn_ids`, `topic_id` нь RequestContext-ийн санал болгож буй metadata болохоос одоогийн schema/implementation биш.
+Recent context нь `MAX_HISTORY_MESSAGES=6`; үүнээс гадна хамгийн ихдээ найман older user-question summary candidate Router input-д орно. Бүх session message Router руу орохгүй. `RequestContext` class байхгүй; runtime plain JSON dictionary ашиглана. `related_turn_ids` нь Router output-д per-request орж, Python allowlist-аар шалгадаг.
 
 ## Logical `RequestContext` fields
 
@@ -37,7 +37,7 @@ Recent context одоогоор `MAX_HISTORY_MESSAGES=6`. Session-д байга�
 | `previous_evidence` | Provenance-тай, bounded prior evidence reference/content |
 | `context_budget` | Жишээ нь `max_history_messages`; context-ийн хязгаар |
 
-Эдгээр нь **logical contract**, бодит runtime schema-тай яг таарсан эсвэл бүгд хэрэгжсэн гэсэн үг биш. Одоогийн router history-г `(role, content)` хос болгон сүүлийн 6 message-ээс авдаг; тусдаа `RequestContext` объект ашигладаггүй.
+Эдгээр нь **logical contract**, бодит runtime schema-тай яг таарсан эсвэл бүгд хэрэгжсэн гэсэн үг биш. Runtime input нь `history_context` (turn_id, role, content бүхий 6 хүртэл message), `older_candidates` (turn_id, question_summary), `current_question` JSON key-тэй; тусдаа `RequestContext` объект ашигладаггүй.
 
 ## Жишээ `RequestContext`
 
@@ -107,6 +107,12 @@ Target RouterResult нь жишээлбэл:
 2. `t102`-ын relevant answer context, selected evidence reference-ийг load хийнэ.
 3. [[Agent Planner]] `resolved_question` дээр single/multi-query strategy шийднэ.
 4. [[Dedup and Evidence review]] өмнөх evidence-ийг дахин шалгана.
+
+## Implementation status (as built)
+
+- Status: partial. Одоогийн plain dictionary contract нь original current question, bounded recent message array, older question candidates агуулна. `classify_intent()` энэ багцыг existing single structured LLM call-д дамжуулж, `requests[].related_turn_ids` буцаана.
+- Verified: routing тестүүд input JSON shape, six-message cap, eight-candidate cap, candidate summary cap болон ID allowlist шалгалтыг offline батална (`tests.test_routing`: 7 passed).
+- Limits: `RequestContext`, `session_id`, `prepared_question`, `previous_evidence`, token budget object байхгүй. Selected turn raw passages pipeline-д reviewer-т дахин өгөгдөх боловч provenance-тай evidence contract хэрэгжээгүй.
 
 ## Related
 

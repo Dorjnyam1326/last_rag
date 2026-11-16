@@ -1,6 +1,6 @@
 ---
 tags: [rag, agentic-rag, context, design-finalized]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 aliases: [Question + History]
 ---
 # Question and history
@@ -45,13 +45,13 @@ flowchart TD
 | **Output — target** | `RequestContext`: original болон optional prepared question, bounded history/candidates/evidence references, budget |
 | **Not here** | Translation, typo correction, semantic rewrite, follow-up шийдвэр, intent/policy, `resolved_question`, retrieval strategy, retrieval, answer generation |
 
-Энэ хүснэгтийн technical preprocessing нь **зорилтот contract**. `answer_question()` одоо string төрлийг болон хоосон/whitespace-only утгыг Router дуудахаас өмнө шалгаж, valid эх асуултыг өөрчлөлгүй дамжуулна. Урт хязгаар, NFC болон whitespace preparation хараахан хийгдээгүй. Одоогийн `classify_intent()` semantic normalization-ийг LLM prompt дотор хийдэг.
+Энэ хүснэгтийн technical preprocessing-ийн зарим хэсэг зорилтот хэвээр. `answer_question()` string type болон хоосон/whitespace-only утгыг Router-оос өмнө шалгаж, эх асуултыг өөрчлөлгүй дамжуулна. Streamlit бүх session history-г pipeline-д өгч, turn бүрт `turn_id` хадгална; QH Router-д сүүлийн зургаан detailed message болон хамгийн ихдээ найман older question summary бэлддэг. Урт хязгаар, NFC болон whitespace preparation хийгдээгүй. Semantic normalization-ийг Router-ийн нэг LLM call хийдэг.
 
 ## 3. Validation ба normalization-ийн зааг
 
 | Давхарга | Эзэмшигч | Юу хийдэг | Юу хийхгүй |
 |---|---|---|---|
-| Technical validation + safe text preparation | Question and History; deterministic Python | Input/history structure, хэмжээ, identifiers, context budget шалгах; утга өөрчлөхгүй NFC/аюулгүй whitespace боловсруулах | Translation, typo засах, intent/follow-up ангилах |
+| Technical validation + safe text preparation | Question and History; deterministic Python | Асуултын type/empty guard; UI turn ID болон bounded recent/candidate context бэлтгэх; Router-ийн сонгосон ID-г өгсөн history allowlist-оор шалгах | Translation, typo засах, intent/follow-up ангилах |
 | Semantic normalization + contextualization | Enhanced Router; existing structured LLM call | Кирилл/Latin/English/mixed хэлний утгыг тайлбарлах, холбоотой context-оор standalone асуулт үүсгэх | Шинэ fact зохиох, final search strategy сонгох |
 
 `original_question` яг ирсэн эхээрээ хадгалагдана. Хэрэв technical preprocessing-ийн дараах утга хэрэгтэй бол `prepared_question` optional field байна; энэ нь эхийг орлохгүй. Whitespace боловсруулалт code block, quoted text, document ID зэрэг exact string-ийг гэмтээж болохгүй.
@@ -89,14 +89,14 @@ flowchart TD
 - **Original question-ийг хадгална.** Latin Mongolian, English, mixed, typo-г technical шатанд semantic rewrite хийхгүй; semantic normalization-ийг [[Enhanced Router]] хариуцна.
 - Unicode NFC болон хязгаартай whitespace normalization нь technical preparation-ийн зорилтот behavior; одоогийн code-д хэрэгжсэн гэж үзэхгүй.
 - **Одоогийн `MAX_HISTORY_MESSAGES=6` хэвээр.** Энэ нь 6 *мессеж* буюу ердийн үед 3 user/assistant pair. Зорилтот загварт энэ тоо нь Router руу явуулах **дэлгэрэнгүй recent message context**-ийн limit; session-д хадгалах бүх turn-ийн тоо биш.
-- Одоогийн UI бүх conversation message-ийг session-д хадгалж харуулна; Core/Router руу өгөх context сүүлийн 6 message-ээр хязгаарлагдана.
-- **Older turns**-ийг шаардлагатай үед session-ийн *товч metadata*-аар candidate болгоно. Энэ нь 6 message limit-ийг зөрчиж, хуучин бүх answer/passage-ийг хавсаргана гэсэн үг биш.
-- **Candidate previous turn** гэдэг нь recent зургаан message-ээс гадуур боловч current асуултад хамаарч болох тухайн session-ийн turn-ийн богино summary/metadata. Candidate байх нь холбоо тогтоосон гэсэн үг биш.
-- `related_turn_ids` нь Router сонгосон context turn-уудын ID, `topic_id` нь session доторх сэдвийн бүлгийг илэрхийлэх design proposal. Хамгийн сүүлийн turn-аас өмнөх хуучин turn-тэй холбогдохыг candidate discovery + Router resolution гэж загварчилна.
+- Одоогийн UI бүх conversation message-ийг session-д хадгалж харуулна; Router руу 6 recent detailed message болон хамгийн ихдээ 8 older question summary өгнө.
+- Runtime нь recent зургаан дэлгэрэнгүй message-ээс гаднах хамгийн сүүлийн найман user-question summary-г candidate болгодог. Энэ нь хуучин бүх answer/passage-ийг Router-д хавсаргана гэсэн үг биш.
+- **Candidate previous turn** гэдэг нь bounded каталогт орсон, user-question-ээр танигдсан prior turn. Candidate байх нь холбоо тогтоосон гэсэн үг биш; одоогийн каталог topic, answer summary, timestamp агуулахгүй.
+- Router `related_turn_ids`-ийг per-request гаргаж, Python тухайн request-д өгсөн recent/candidate ID allowlist-аар шалгана. Энэ нь тусдаа session identity/authentication баталгаажуулалт биш; `topic_id` одоогоор implementation-д байхгүй.
 - **Raw passage ≠ selected evidence.** Өмнөх answer-д хамааралгүй result-ийг history evidence гэж үзэхгүй.
 - **Link ≠ evidence.** Хуучин turn ID нь reference, харин бодлого/журам батлах эх сурвалж биш.
 - **Per-request linking.** Олон intent-тэй turn-ийн R1/R2/R3 тус тусдаа context link агуулж болно.
-- **Session boundary.** Өөр хүний эсвэл өөр session-ийн message ID-г холбохгүй.
+- **Session boundary limitation.** UI тухайн Streamlit session-ийн history-г дамжуулдаг ч runtime-д `session_id` байхгүй. Pipeline нь зөвхөн caller-аас өгсөн history доторх ID-г allowlist-аар шалгана; cross-session authorization гэж үзэхгүй.
 
 ## 6. Хоёр шаттай context loading
 
@@ -113,7 +113,7 @@ flowchart TD
 **Яагаад?** Хуучин 50 turn-ийн бүх answer, passage-ийг Router-д урьдчилан өгөх нь token ихтэй, төөрөгдөл үүсгэнэ. Эхлээд хязгаартай summary; сонгосон turn-ийн дэлгэрэнгүй context-ийг дараа нь load хийнэ.
 
 > [!warning] Шинэчлэлтийн зааг
-> Одоогийн `refactor` нь сүүлийн зургаан мессежээр router ажиллуулж, follow-up үед **хамгийн сүүлийн assistant turn-ийн raw passages**-ийг дахин авч review хийдэг. `related_turn_ids`, older candidates, selected evidence reuse нь одоогоор **зорилтот дизайн**, хэрэгжсэн гэж үзэхгүй.
+> QH нь сүүлийн зургаан detailed message болон хамгийн ихдээ найман older turn-ийн user-question summary-г Router-д өгнө. Router-ийн `related_turn_ids` нь зөвхөн энэ input allowlist-оос сонгогдож, Python дахин шалгана. Pipeline passages-ийг сонгосон turn-ээс авч reviewer-т дахин өгдөг. Гэхдээ эдгээр нь одоогоор UI-д хадгалсан raw passages; provenance-тай reviewed evidence хадгалалт бүрэн хэрэгжээгүй.
 
 Одоогийн UI raw `result["passages"]`-ийг bounded хэмжээгээр history-д хадгалж байна; reviewer-аар шүүсэн `result["evidence"]`-ийг биш. Дэлгэрэнгүй: [[QH - Evidence and provenance]].
 
@@ -121,13 +121,13 @@ flowchart TD
 
 - Status: partial
 - Last checked: 2026-11-16
-- Git revision: `main` (uncommitted working tree)
-- Code owner: `rag/pipeline.py::answer_question`
-- Behavior verified: non-string input returns `error`; empty or whitespace-only input returns `clarification`; both stop before Router. Non-empty original question is passed unchanged.
-- Tests executed: 3 focused offline `unittest` cases passed; see `RAG_Implementation_Playbook.md`.
-- Limitations: no maximum-length check, NFC/text preparation, or history validation/context building.
-- Architecture deviations: none for this input-guard scope.
-- Next implementation step: Enhanced Router phase.
+- Git revision: `main` @ `7af80a9` (status-note updates uncommitted)
+- Code owners: `ui/streamlit_ui.py::_ensure_turn_ids`, `rag/routing.py::prepare_history`, `rag/routing.py::build_router_history_context`, `rag/pipeline.py::answer_question`
+- Behavior verified: non-string and empty input stop before Router; original question is passed unchanged. UI stores one UUID turn ID on each user/assistant pair and passes full session history. QH prepares up to six detailed messages and up to eight older user-question summaries, each capped at 240 characters. Legacy callers without IDs receive request-local IDs for validation.
+- Tests executed in this phase: 7 routing, 15 focused pipeline, and 1 Streamlit history test passed offline; see `RAG_Implementation_Playbook.md`.
+- Limitations: no maximum-length check, NFC/text preparation, or explicit persisted session ID. Candidate discovery is a chronological bounded catalogue, not semantic search; older turns outside the eight-candidate window cannot be selected. UI still stores raw passages rather than reviewed evidence.
+- Architecture deviations: no `RequestContext` class or new dependency; plain Python values are used at the existing boundary.
+- Next implementation step: improve evidence provenance and verify semantic relationship/normalization quality; do not treat candidate plumbing as semantic-quality proof.
 
 ## Related
 

@@ -161,33 +161,46 @@ class StreamlitUiTests(unittest.TestCase):
                     self.assertTrue(app.warning)
                 answer.assert_called_once_with(self.question, history=[])
 
-    def test_streamlit_passes_recent_history_to_pipeline(self):
+    def test_streamlit_passes_full_history_with_stable_turn_ids_to_pipeline(self):
         response = {
             "answer": "Grounded answer",
             "citations": [],
             "status": "answered",
             "passages": [],
         }
+        questions = [
+            "Эхний асуулт",
+            "Хоёр дахь асуулт",
+            "Гурав дахь асуулт",
+            "Дөрөв дэх асуулт",
+            "Тав дахь асуулт",
+        ]
         with patch("ui.streamlit_ui.answer_question", return_value=response) as answer:
             app = AppTest.from_file(str(APP_FILE)).run()
-            app.chat_input[0].set_value("Эхний асуулт").run()
-            app.chat_input[0].set_value("Тэгвэл яах вэ?").run()
+            for question in questions:
+                app.chat_input[0].set_value(question).run()
 
         self.assertFalse(app.exception)
-        self.assertEqual(answer.call_count, 2)
-        answer.assert_any_call("Эхний асуулт", history=[])
-        answer.assert_any_call(
-            "Тэгвэл яах вэ?",
-            history=[
-                {"role": "user", "content": "Эхний асуулт"},
-                {
-                    "role": "assistant",
-                    "content": "Grounded answer",
-                    "citations": [],
-                    "status": "answered",
-                },
-            ],
+        self.assertEqual(answer.call_count, len(questions))
+        self.assertEqual(answer.call_args_list[0].kwargs["history"], [])
+        latest_history = answer.call_args_list[-1].kwargs["history"]
+        self.assertEqual(len(latest_history), 2 * (len(questions) - 1))
+        self.assertEqual(
+            [message["content"] for message in latest_history if message["role"] == "user"],
+            questions[:-1],
         )
+        turn_ids = [
+            latest_history[index]["turn_id"]
+            for index in range(0, len(latest_history), 2)
+        ]
+        self.assertTrue(all(turn_ids))
+        self.assertEqual(len(set(turn_ids)), len(questions) - 1)
+        for index in range(0, len(latest_history), 2):
+            self.assertEqual(
+                latest_history[index]["turn_id"],
+                latest_history[index + 1]["turn_id"],
+            )
+        self.assertEqual(answer.call_args_list[-1].args[0], questions[-1])
 
     def test_displays_grouped_answers_citations_and_passages(self):
         result = {

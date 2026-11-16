@@ -10,6 +10,7 @@ def route_result(
     search_query=None,
     relationship="new",
     resolved_question=None,
+    related_turn_ids=None,
 ):
     return {
         "requests": [
@@ -18,6 +19,7 @@ def route_result(
                 "search_query": question if search_query is None else search_query,
                 "relationship": relationship,
                 "resolved_question": question if resolved_question is None else resolved_question,
+                "related_turn_ids": [] if related_turn_ids is None else related_turn_ids,
             }
         ]
     }
@@ -90,9 +92,9 @@ class AnswerQuestionTests(unittest.TestCase):
             result = answer_question(question)
 
         search.assert_called_once_with(question, limit=5)
-        classify.assert_called_once_with(question, None)
-        generate.assert_called_once_with(question, passages)
-        self.assertEqual(result, {**generated, "passages": passages})
+        classify.assert_called_once_with(question, None, model=None, api_key=None)
+        generate.assert_called_once_with(question, passages, model=None, api_key=None)
+        self.assertEqual(result, {**generated, "passages": passages, "evidence": []})
 
     def test_empty_retrieval_is_passed_to_generation_without_extra_logic(self):
         generated = {
@@ -112,7 +114,7 @@ class AnswerQuestionTests(unittest.TestCase):
             result = answer_question(question)
 
         search.assert_called_once()
-        generate.assert_called_once_with(question, [])
+        generate.assert_called_once_with(question, [], model=None, api_key=None)
         self.assertEqual(result["status"], "insufficient")
 
     def test_retrieval_errors_propagate_to_ui_boundary(self):
@@ -141,9 +143,9 @@ class AnswerQuestionTests(unittest.TestCase):
         ):
             result = answer_question(question)
 
-        classify.assert_called_once_with(question, None)
+        classify.assert_called_once_with(question, None, model=None, api_key=None)
         search.assert_called_once_with(search_query, limit=5)
-        generate.assert_called_once_with(question, passages)
+        generate.assert_called_once_with(question, passages, model=None, api_key=None)
         self.assertEqual(result["status"], "answered")
 
     def test_salary_procedure_is_allowed_to_search(self):
@@ -170,7 +172,9 @@ class AnswerQuestionTests(unittest.TestCase):
                     result = answer_question(question)
 
                 search.assert_called_once_with(question, limit=5)
-                generate.assert_called_once_with(question, [])
+                generate.assert_called_once_with(
+                    question, [], model=None, api_key=None
+                )
                 self.assertEqual(result["status"], "insufficient")
 
     def test_follow_up_uses_resolved_context_for_search_and_generation(self):
@@ -194,6 +198,7 @@ class AnswerQuestionTests(unittest.TestCase):
                     search_query,
                     "follow_up",
                     resolved_question,
+                    related_turn_ids=["legacy-turn-0"],
                 ),
             ) as classify,
             patch("rag.pipeline.search_documents", return_value=passages) as search,
@@ -201,9 +206,11 @@ class AnswerQuestionTests(unittest.TestCase):
         ):
             result = answer_question(question, history)
 
-        classify.assert_called_once_with(question, history)
+        classify.assert_called_once_with(question, history, model=None, api_key=None)
         search.assert_called_once_with(search_query, limit=5)
-        generate.assert_called_once_with(resolved_question, passages)
+        generate.assert_called_once_with(
+            resolved_question, passages, model=None, api_key=None
+        )
         self.assertEqual(result["status"], "answered")
 
     def test_new_topic_does_not_reuse_unrelated_resolved_context(self):
@@ -223,9 +230,9 @@ class AnswerQuestionTests(unittest.TestCase):
         ):
             answer_question(question, history)
 
-        classify.assert_called_once_with(question, history)
+        classify.assert_called_once_with(question, history, model=None, api_key=None)
         search.assert_called_once_with(search_query, limit=5)
-        generate.assert_called_once_with(question, [])
+        generate.assert_called_once_with(question, [], model=None, api_key=None)
 
     def test_unresolved_follow_up_returns_clarification_without_search(self):
         question = "Тэгвэл яах вэ?"
@@ -256,6 +263,89 @@ class AnswerQuestionTests(unittest.TestCase):
                 search.assert_not_called()
                 generate.assert_not_called()
 
+    def test_unlisted_follow_up_turn_id_returns_clarification_without_search(self):
+        history = [
+            {"role": "user", "turn_id": "turn-1", "content": "Чөлөөний журам?"},
+            {"role": "assistant", "turn_id": "turn-1", "content": "Журам."},
+        ]
+        question = "Тэгвэл хэн зөвшөөрөх вэ?"
+        request = route_result(
+            "workplace",
+            question,
+            relationship="follow_up",
+            resolved_question="Чөлөөг хэн зөвшөөрөх вэ?",
+            related_turn_ids=["other-session-turn"],
+        )
+        with (
+            patch("rag.pipeline.classify_intent", return_value=request),
+            patch("rag.pipeline.search_documents") as search,
+            patch("rag.pipeline.generate_answer") as generate,
+        ):
+            result = answer_question(question, history)
+
+        self.assertEqual(result["status"], "clarification")
+        search.assert_not_called()
+        generate.assert_not_called()
+
+    def test_follow_up_reuses_passages_only_from_selected_older_turn(self):
+        question = "Тэгвэл менежер байхгүй бол хэн батлах вэ?"
+        selected_passage = {
+            "file_id": "selected-file",
+            "filename": "leave.pdf",
+            "text": "Selected older turn passage",
+        }
+        unrelated_passage = {
+            "file_id": "unrelated-file",
+            "filename": "ethics.pdf",
+            "text": "Unrelated recent turn passage",
+        }
+        new_passage = {
+            "file_id": "new-file",
+            "filename": "policy.pdf",
+            "text": "New search result",
+        }
+        history = [
+            {"role": "user", "turn_id": "leave-turn", "content": "3 цагийн чөлөө?"},
+            {
+                "role": "assistant",
+                "turn_id": "leave-turn",
+                "content": "Leave answer",
+                "passages": [selected_passage],
+            },
+            {"role": "user", "turn_id": "middle-1", "content": "Өөр ажлын асуулт нэг."},
+            {"role": "assistant", "turn_id": "middle-1", "content": "Өөр хариулт нэг."},
+            {"role": "user", "turn_id": "middle-2", "content": "Өөр ажлын асуулт хоёр."},
+            {"role": "assistant", "turn_id": "middle-2", "content": "Өөр хариулт хоёр."},
+            {"role": "user", "turn_id": "ethics-turn", "content": "Ёс зүйн гомдол?"},
+            {
+                "role": "assistant",
+                "turn_id": "ethics-turn",
+                "content": "Ethics answer",
+                "passages": [unrelated_passage],
+            },
+        ]
+        request = route_result(
+            "workplace",
+            question,
+            relationship="follow_up",
+            resolved_question="3 цагийн чөлөөг менежер эзгүй үед хэн батлах вэ?",
+            related_turn_ids=["leave-turn"],
+        )
+        with (
+            patch("rag.pipeline.classify_intent", return_value=request),
+            patch("rag.pipeline.search_documents", return_value=[new_passage]),
+            patch(
+                "rag.pipeline.generate_answer",
+                return_value={"answer": "Grounded", "citations": [], "status": "answered"},
+            ),
+        ):
+            result = answer_question(question, history)
+
+        self.assertEqual(
+            [passage["file_id"] for passage in result["passages"]],
+            ["new-file", "selected-file"],
+        )
+
     def test_restricted_follow_up_is_blocked_after_context_resolution(self):
         question = "Тэгвэл миний цалин хэдэн төгрөг вэ?"
         history = [{"role": "user", "content": "Цалингийн мэдээллийн талаар асууя."}]
@@ -268,6 +358,7 @@ class AnswerQuestionTests(unittest.TestCase):
                 "Цалингийн мэдээллийн талаар асууж байна: "
                 "миний цалин хэдэн төгрөг вэ?"
             ),
+            related_turn_ids=["legacy-turn-0"],
         )
         with (
             patch("rag.pipeline.classify_intent", return_value=route) as classify,
@@ -276,7 +367,7 @@ class AnswerQuestionTests(unittest.TestCase):
         ):
             result = answer_question(question, history)
 
-        classify.assert_called_once_with(question, history)
+        classify.assert_called_once_with(question, history, model=None, api_key=None)
         self.assertEqual(result["status"], "restricted")
         self.assertEqual(result["citations"], [])
         self.assertEqual(result["passages"], [])
@@ -307,6 +398,27 @@ class AnswerQuestionTests(unittest.TestCase):
                 search.assert_not_called()
                 generate.assert_not_called()
 
+    def test_llm_route_policy_suggestions_cannot_override_restriction(self):
+        question = "Миний цалин хэд вэ?"
+        request = {
+            "intent": "salary_amount",
+            "search_query": question,
+            "relationship": "new",
+            "resolved_question": question,
+            "policy": "allowed",
+            "route": "retrieval",
+        }
+        with (
+            patch("rag.pipeline.classify_intent", return_value={"requests": [request]}),
+            patch("rag.pipeline.search_documents") as search,
+            patch("rag.pipeline.generate_answer") as generate,
+        ):
+            result = answer_question(question)
+
+        self.assertEqual(result["status"], "restricted")
+        search.assert_not_called()
+        generate.assert_not_called()
+
     def test_disabling_one_rule_changes_enforcement_without_changing_classifier(self):
         question = "Миний цалин хэд вэ?"
         with (
@@ -327,9 +439,9 @@ class AnswerQuestionTests(unittest.TestCase):
         ):
             result = answer_question(question)
 
-        classify.assert_called_once_with(question, None)
+        classify.assert_called_once_with(question, None, model=None, api_key=None)
         search.assert_called_once_with(question, limit=5)
-        generate.assert_called_once_with(question, [])
+        generate.assert_called_once_with(question, [], model=None, api_key=None)
         self.assertEqual(result["status"], "insufficient")
 
     def test_general_and_greeting_skip_retrieval_and_generation(self):
@@ -408,7 +520,7 @@ class AnswerQuestionTests(unittest.TestCase):
                     result = answer_question(question)
 
                 search.assert_called_once_with(question, limit=5)
-                generate.assert_called_once_with(question, [])
+                generate.assert_called_once_with(question, [], model=None, api_key=None)
                 self.assertEqual(result["status"], "insufficient")
 
     def test_unknown_route_fails_closed(self):
@@ -446,8 +558,8 @@ class AnswerQuestionTests(unittest.TestCase):
             [{"file_id": "f2", "filename": "security.pdf", "text": "retention"}],
         ]
         generated = [
-            {"answer": "Leave answer", "citations": [{"source_id": "D1", "filename": "leave.pdf"}], "status": "answered"},
-            {"answer": "Retention answer", "citations": [{"source_id": "D1", "filename": "security.pdf"}], "status": "answered"},
+            {"answer": "Leave answer", "citations": [{"source_id": "D1", "file_id": "f1", "filename": "leave.pdf"}], "status": "answered"},
+            {"answer": "Retention answer", "citations": [{"source_id": "D1", "file_id": "f2", "filename": "security.pdf"}], "status": "answered"},
         ]
         with (
             patch("rag.pipeline.classify_intent", return_value={"requests": [leave, retention]}) as classify,
@@ -488,7 +600,12 @@ class AnswerQuestionTests(unittest.TestCase):
         self.assertEqual([item["status"] for item in result["results"]], ["answered", "restricted"])
         self.assertEqual(len(result["results"][1]["passages"]), 0)
         search.assert_called_once_with(allowed["search_query"], limit=5)
-        generate.assert_called_once_with(allowed["resolved_question"], search.return_value)
+        generate.assert_called_once_with(
+            allowed["resolved_question"],
+            search.return_value,
+            model=None,
+            api_key=None,
+        )
 
     def test_multiple_follow_ups_use_each_resolved_question(self):
         requests = [
@@ -497,12 +614,14 @@ class AnswerQuestionTests(unittest.TestCase):
                 "search_query": "Чөлөө батлах хүн",
                 "relationship": "follow_up",
                 "resolved_question": "Эмчид үзүүлэх чөлөөг хэн батлах вэ?",
+                "related_turn_ids": ["legacy-turn-0"],
             },
             {
                 "intent": "workplace",
                 "search_query": "Чөлөө авахад шаардлагатай бичиг баримт",
                 "relationship": "follow_up",
                 "resolved_question": "Эмчид үзүүлэх чөлөө авахад ямар бичиг баримт хэрэгтэй вэ?",
+                "related_turn_ids": ["legacy-turn-0"],
             },
         ]
         history = [{"role": "user", "content": "Эмчид үзүүлэх чөлөө авах журмыг тайлбарла."}]
@@ -513,7 +632,12 @@ class AnswerQuestionTests(unittest.TestCase):
         ):
             result = answer_question("Тэгвэл хэн батлах вэ, бас ямар бичиг баримт хэрэгтэй вэ?", history)
 
-        classify.assert_called_once_with("Тэгвэл хэн батлах вэ, бас ямар бичиг баримт хэрэгтэй вэ?", history)
+        classify.assert_called_once_with(
+            "Тэгвэл хэн батлах вэ, бас ямар бичиг баримт хэрэгтэй вэ?",
+            history,
+            model=None,
+            api_key=None,
+        )
         self.assertEqual(search.call_count, 2)
         self.assertEqual([call.args[0] for call in generate.call_args_list], [item["resolved_question"] for item in requests])
         self.assertEqual([item["status"] for item in result["results"]], ["insufficient", "insufficient"])
@@ -562,7 +686,9 @@ class AnswerQuestionTests(unittest.TestCase):
 
         self.assertEqual([item["status"] for item in result["results"]], ["error", "answered"])
         self.assertNotIn("secret", result["results"][0]["answer"])
-        generate.assert_called_once_with(requests[1]["resolved_question"], passages)
+        generate.assert_called_once_with(
+            requests[1]["resolved_question"], passages, model=None, api_key=None
+        )
 
     def test_generation_failure_keeps_other_request_result(self):
         requests = [
@@ -624,8 +750,14 @@ class AnswerQuestionTests(unittest.TestCase):
         self.assertEqual(search.call_count, 2)
         self.assertEqual(search.call_args_list[1].args[0], review["retry_query"])
         self.assertEqual(evaluate.call_count, 2)
-        generate.assert_called_once_with(question, [first, second])
-        self.assertEqual(result["passages"], [first, second])
+        merged_first = {
+            **first,
+            "source_provenance": [{"file_id": "f1", "filename": "policy.pdf"}],
+        }
+        generate.assert_called_once_with(
+            question, [merged_first, second], model=None, api_key=None
+        )
+        self.assertEqual(result["passages"], [merged_first, second])
 
     def test_identical_retry_query_is_skipped_and_partial_status_is_passed(self):
         question = "Нууц баримт хадгалах хугацаа?"
@@ -650,6 +782,8 @@ class AnswerQuestionTests(unittest.TestCase):
             passages,
             evidence_status="partial",
             missing_information=review["missing_information"],
+            model=None,
+            api_key=None,
         )
         self.assertEqual(result["status"], "partially_answered")
 
@@ -687,12 +821,14 @@ class AnswerQuestionTests(unittest.TestCase):
             result = answer_question(question)
 
         self.assertEqual(search.call_count, 2)
-        evaluate.assert_called_once_with(question, [first])
+        evaluate.assert_called_once_with(question, [first], model=None, api_key=None)
         generate.assert_called_once_with(
             question,
             [first],
             evidence_status="partial",
             missing_information=review["missing_information"],
+            model=None,
+            api_key=None,
         )
         self.assertEqual(result["passages"], [first])
         self.assertEqual(result["status"], "partially_answered")
@@ -730,6 +866,8 @@ class AnswerQuestionTests(unittest.TestCase):
             [first],
             evidence_status="partial",
             missing_information="зөвшөөрлийн нөхцөл",
+            model=None,
+            api_key=None,
         )
         self.assertEqual(result["passages"], [first, additional])
         self.assertEqual(result["status"], "partially_answered")
@@ -763,6 +901,8 @@ class AnswerQuestionTests(unittest.TestCase):
             [first],
             evidence_status="partial",
             missing_information="зөвшөөрлийн нөхцөл",
+            model=None,
+            api_key=None,
         )
         self.assertEqual(result["passages"], [first, additional])
         self.assertEqual(result["status"], "partially_answered")

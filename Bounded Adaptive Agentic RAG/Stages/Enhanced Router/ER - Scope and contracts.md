@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # ER - Scope and contracts
 
@@ -31,10 +31,10 @@ Router **retrieval strategy сонгохгүй**, Vector Store хайлт хий
 
 | | Design contract |
 |---|---|
-| **Input** | [[QH - RequestContext contract]]: original current question, сүүлийн 6 мессеж, боломжтой бол хүчинтэй session доторх candidate turn metadata/evidence reference |
+| **Input** | Original question, turn ID-тай хамгийн ихдээ 6 recent user/assistant message, 8 хүртэлх older user-question summary. UI full history-г өгч, QH үүнийг bounded болгоно |
 | **Processing** | Нэг structured LLM output дотор semantic ойлголт, relationship/reference resolution, independent request ялгалт, intent/policy suggestion, resolved question |
-| **Backend validation** | Schema, request count, route/policy утга, question хоосон эсэх, candidate turn ID ба session эрхийг код шалгана |
-| **Output** | `RouterResult`: хүсэлт бүрийн relationship, selected turn ID, intent/policy, route, standalone question, clarification төлөв |
+| **Backend validation** | Structured schema, request count, intent/relationship, `resolved_question`, `related_turn_ids` input allowlist; policy/route-ийг Python validated intent-ээс deterministic байдлаар гаргана. Session ownership/time validation байхгүй |
+| **Output** | Одоогийн `requests[]`: request бүрийн `intent`, `search_query`, `relationship`, `resolved_question`, `related_turn_ids`, Python-derived `policy`/`route`. Тусдаа `RouterResult` class байхгүй |
 
 Эдгээр таван ойлголтыг тус тусын шат шиг дүрсэлж болох ч **таван тусдаа LLM call гэсэн үг биш**. Эхний загварт нэг `classify_intent()` structured call бүх semantic ангиллыг гаргаж болно; Python тал хатуу нөхцөлийг validate/enforce хийнэ.
 
@@ -103,18 +103,19 @@ flowchart TD
 
 Planner Router-ийн semantic classification-ийг дахин эхнээс нь хийхгүй. Router нь Vector Store search, evidence grading, final generation хийхгүй.
 
-## Implementation status
+## Implementation status (as built)
 
-| Одоогийн `refactor` | Enhanced Router design / pending |
+| Одоогийн `refactor` | Pending design/dependency |
 |---|---|
-| LLM-based `classify_intent()` нэг structured call-аар `requests[]` гаргана | Өргөтгөсөн `RequestContext` ба `RouterResult` contract |
-| Relationship: `new / follow_up / clarification` | `related_turn_ids`, older-turn reference selection |
-| `resolved_question`, `search_query` | Request-level relationship болон optional `relation_detail` |
-| Greeting, restriction, out-of-scope routing; multi-intent processing | Ил тод policy/route output ба stronger backend validation |
-| Recent зургаан conversation message | Candidate allowlist дээр тулгуурласан хуучин turn сонголт |
-| Нэг мессежид гурав хүртэл request; илүү бол clarification response | Capability plan-ийг [[Agent Planner]], strategy болон executable query-г [[Select search strategy]] хариуцах boundary; compatibility-ийн үед `search_query` хадгалах |
+| `classify_intent()` нэг structured call-аар relationship, intent, decomposition, query болон per-request `related_turn_ids` гаргана | Бүрэн `RequestContext` болон өргөтгөсөн `RouterResult` class |
+| Relationship: `new / follow_up / clarification`; usable history/valid ID байхгүй follow-up clarification болно | `relation_detail`, session ownership/time authorization |
+| Policy/route нь validated intent + restriction registry-гээс Python-д гарна; pipeline тэдгээрийг дахин тооцож enforcement хийнэ. ID supplied-history allowlist-аар шалгана | Candidate search/ranking ба session identity-тэй validation |
+| Нэг мессежид 3 хүртэл request; илүү request бол safe clarification | Capability plan-ийг [[Agent Planner]], strategy болон executable query-г [[Select search strategy]] хариуцах boundary |
 
-Proposed functionality-г хэрэгжсэн гэж бүү үз. Одоогийн code нь `related_turn_ids`, `relation_detail`, `policy`, `route` field-үүдийг `classify_intent()`-ийн output-д буцаадаггүй.
+- Status: partial
+- Evidence: `tests.test_routing` (7 passed), 15 focused `AnswerQuestionTests` passed, offline mocks, 2026-11-16. Broader pipeline class: 33 run, 11 stale assertion/fixture failures.
+- Limits: semantic normalization/intent/reference accuracy source-verified label эсвэл live run-аар батлагдаагүй. Supplied-history allowlist нь cross-session identity батлахгүй; raw previous passages request-scoped provenance-гүй.
+- Deviation: одоогийн runtime `policy`/`route`-ийг LLM output-оос авахгүй; validated intent-ээс Python гаргаж байна. LLM route/policy санал security boundary биш.
 
 ## Navigation
 

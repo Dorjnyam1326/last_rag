@@ -1,14 +1,14 @@
 ---
 tags: [rag, context, selection]
-status: proposed-algorithm
+status: design-finalized-implementation-partial
 ---
 # QH - Context candidates
 
 ## Асуудал
 
-`MAX_HISTORY_MESSAGES=6` гэдэг нь **сүүлийн 6 message**, ойролцоогоор 3 бүтэн turn. Харин шинэ E асуулт нь хамгийн сүүлийн D биш, өмнөх B асуултад эргэж очиж болно. Тиймээс **recent context** болон **older candidate catalogue**-ийг салгана.
+`MAX_HISTORY_MESSAGES=6` гэдэг нь **сүүлийн 6 message**, ойролцоогоор 3 бүтэн turn. Харин шинэ E асуулт нь хамгийн сүүлийн D биш, өмнөх B асуултад эргэж очиж болно. Тиймээс **recent context** болон **older candidate catalogue**-ийг салгана. Runtime энэ салгалтыг хэрэгжүүлсэн: recent зургаан message, recent window-ээс гаднах хамгийн сүүлийн найман user-question summary.
 
-Энэ candidate catalogue бол target design. Одоогийн code сүүлийн зургаан message-ээс өмнөх turn-уудыг хайхгүй. Ангиллын үндсэн ойлголтууд: [[Question taxonomy]].
+Runtime catalogue нь зөвхөн `turn_id` ба 240 тэмдэгт хүртэлх `question_summary` агуулна; topic, timestamp, answer summary болон semantic shortlist байхгүй. Ангиллын үндсэн ойлголтууд: [[Question taxonomy]].
 
 ## Candidate assembly — том алгоритм
 
@@ -65,7 +65,13 @@ Candidate бүр тухайн session-д харьяалагдсан valid turn I
 
 ## Candidate ordering
 
-Candidate-ийг **хуучин → шинэ** chronological sequence-ээр харуулна; `turn_id`, timestamp, topic label-ийг хамт өгнө. Шинэ асуултад topic нэр таарсан гэх нэг шалтгаанаар relation шууд тогтоохгүй.
+Candidate-ийг **хуучин → шинэ** chronological sequence-ээр харуулна; runtime-д `turn_id` болон question summary байна. Timestamp, topic label нэмэх нь цаашдын design. Шинэ асуултад topic нэр таарсан гэх нэг шалтгаанаар relation шууд тогтоохгүй.
+
+## Implementation status (as built)
+
+- Status: partial. `build_router_history_context()` нь role/content/turn ID-тай сүүлийн 6 usable message, recent window-д ороогүй хамгийн сүүлийн 8 user turn-ийн summaryг chronological дарааллаар гаргана.
+- Verified: summary 240 тэмдэгтээс хэтрэхгүй, allowed ID багц зөвхөн recent messages ба candidate catalogue-д орсон turn-үүдийг агуулна (`tests.test_routing.ClassifyIntentTests.test_older_candidate_catalogue_is_chronological_and_bounded`). Legacy history-д ID байхгүй бол request-local `legacy-turn-{index}` ID онооно.
+- Limits: candidate discovery зөвхөн chronology дээр тулгуурлана; 8-аас хуучин turn сонгогдохгүй. Session identity тусдаа баталгаажихгүй, candidate coverage/semantic choice чанар live эсвэл label-тэй evaluation-аар шалгагдаагүй.
 
 ## Related
 

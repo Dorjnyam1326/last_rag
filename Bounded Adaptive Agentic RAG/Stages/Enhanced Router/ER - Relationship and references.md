@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # ER - Relationship and references
 
@@ -65,6 +65,13 @@ Follow-up үед Router зөвхөн хэрэглэгчийн асуулт бо�
 
 > [!note] Хуучин boundary wording
 > Өмнөх draft strategy болон final query-г Agent Planner-д оноож байсан. Энэ нь capability-based architecture-тэй зөрчилдсөн тул migration хийхдээ Selector руу шилжүүлсэн; `resolved_question`-ийн Router ownership өөрчлөгдөөгүй.
+
+## Implementation status (as built)
+
+- Status: partial. Router classifies each request as `new`, `follow_up`, or `clarification` and may select per-request `related_turn_ids` in one structured call. QH supplies up to six recent messages and eight older question summaries.
+- Verified: no-context follow-up and unknown/mismatched candidate IDs fail closed to clarification. Python checks IDs against the supplied history allowlist; pipeline reuses passages only from selected turn IDs (`tests.test_routing`: 7 passed; focused pipeline tests include ID rejection and selected-turn isolation, 2026-11-16).
+- Not verified: model accuracy choosing an older referent from A/B/C/D/E or distinguishing ambiguous references. Chronological candidate inclusion is tested; semantic selection is not.
+- Remaining limits: no `session_id` ownership/time check, parent-chain resolution, or request-level evidence ID. Selected turn raw passages can include multiple prior requests and are reviewed again; this is not full evidence isolation.
 
 ## Navigation
 

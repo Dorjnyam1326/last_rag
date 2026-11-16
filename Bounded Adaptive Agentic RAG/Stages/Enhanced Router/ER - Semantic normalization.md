@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # ER - Semantic normalization
 
@@ -48,6 +48,13 @@ Enhanced Router эдгээр input-ийг existing нэг structured LLM call д
 > Өмнөх draft final `search_queries[]`-ийг Agent Planner-ийн үүрэг гэж заасан. Энэ attribution нь одоо superseded; Planner capability proposal гаргаж, Selector strategy-specific query-г бэлдэнэ.
 
 Одоогийн `build_search_query()` чөлөөтэй холбоотой query доторх цагийн range-ийг retrieval-ээс хасах дүрэмтэй ч цаг/range заримдаа хайхад чухал байж болно. Энэ бол semantic normalization биш бөгөөд retrieval recall-д нөлөөлөх эсэх нь баталгаажаагүй; одоогийн кодод өөрчлөлт хийхгүй.
+
+## Implementation status (as built)
+
+- Status: partial. `classify_intent()` sends the original question, up to six recent messages, and up to eight older question summaries to the existing single structured Router call; its prompt directs normalization into `search_query` and context-aware `resolved_question` without another LLM call.
+- Verified: offline routing tests confirm the original question is unchanged, recent/candidate context is bounded and serialized, and one structured invocation is used (`tests.test_routing`: 7 passed, 2026-11-16).
+- Not verified: Cyrillic/Latin/English meaning preservation, typo correction, negation/number fidelity, and source-grounded semantic quality. Prompt text and mocked output do not establish those outcomes.
+- Dependency/gap: older reference resolution is now technically supported only within the bounded catalogue; semantic accuracy remains unverified, and references beyond the latest eight older candidates cannot be resolved from this input.
 
 ## Navigation
 

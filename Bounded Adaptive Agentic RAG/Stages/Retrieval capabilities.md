@@ -418,7 +418,8 @@ Strategy implementation нь information needs-ээс final query үүсгэж �
 | PlanningProposal contract | Proposed |
 | Strategy Registry contract | Proposed |
 | Capability matching algorithm | Proposed |
-| Python implementation | Pending |
-| Runtime validation | Pending |
+| Planner capability vocabulary and proposal validation | Implemented; offline tests and synthetic live smoke passed in `rag/planning.py` |
+| Strategy Registry and capability matching | Pending; catalog entries are not runtime availability claims |
+| Selector handoff/runtime validation | Pending |
 
 Энэ note нь архитектурын шийдвэрүүдийг тайлбарлана. Бодит код хэрэгжсэн гэсэн баталгаа биш.

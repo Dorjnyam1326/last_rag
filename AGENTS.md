@@ -60,6 +60,7 @@ Apply these principles to every change; they are constraints on **total codebase
 - Treat design notes as target behavior, not proof of implementation. Inspect the code and tests, then summarize the code owners and gaps before changing anything.
 - Start with `PLAN_ONLY`; implement only one explicitly requested phase at a time. Keep the existing OpenAI Vector Store and use the old LangChain project as a read-only behavior reference.
 - Reuse existing evaluation fixtures; do not invent ground truth or describe unreviewed results as verified quality. Use offline checks first; make live API calls only when explicitly authorized.
+- After each implementation phase, update the phase hub **and every affected subnote** with a concise `Implementation status (as built)` and matching frontmatter status (`pending`, `partial`, or implemented). Base each status on inspected code and tests; a completed slice does not make the whole component complete. Leave unaffected notes unchanged. Update the Playbook code-owner/progress entries; update Evaluation metrics only from a verified run.
 
 ## RAG correctness constraints
 

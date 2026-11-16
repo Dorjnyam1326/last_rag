@@ -1,6 +1,6 @@
 ---
 tags: [rag, context, follow-up, graph]
-status: proposed-algorithm
+status: design-finalized-implementation-partial
 ---
 # QH - Conversation links
 
@@ -68,6 +68,12 @@ flowchart TD
 - Direct parent алдаатай бол downstream chain бүхэлдээ алдаж болно. Link-ийг absolute truth гэж үзэхгүй.
 - Parent record устсан/хандах эрхгүй болсон бол link-ийг ашиглахгүй, шаардлагатай бол clarification.
 - Нэг шинэ message олон request-тэй бол `related_turn_ids`-ийг **request бүрд** хадгална.
+
+## Implementation status (as built)
+
+- Status: partial. UI turn бүрт UUID хадгалж, QH candidate catalogue-д turn ID өгнө. Router request бүрийн `related_turn_ids`-ийг existing structured output-оор буцааж, routing болон pipeline код supplied history allowlist-аар давхар шалгана.
+- Verified: unknown ID, new request дээр буруу ID, мөн сонгоогүй turn-ийн passages pipeline-д орохгүйг offline тестүүд шалгана (`tests.test_routing`, focused `tests.test_pipeline.AnswerQuestionTests`). Сонгосон turn-ийн raw passage нь шинэ асуултад зориулж reviewer-т дахин орно.
+- Limits: allowlist нь caller-аас ирсэн `history`-г л шалгана; `session_id`, ownership/time authorization, parent chain байхгүй. Turn түвшний passage reuse нь multi-request хуучин turn дотор request тусгаарлалтыг бүрэн хангахгүй; evidence нь raw бөгөөд reviewed provenance биш. Semantic referent choice баталгаажаагүй.
 
 ## Related
 

@@ -114,9 +114,9 @@ flowchart TD
 
 | Stage | Confirmed function/class | Actual file path | Design parity | Tests | Notes |
 |---|---|---|---|---|---|
-| Question and History | `answer_question` | `rag/pipeline.py` | Partial | `tests.test_pipeline.AnswerQuestionTests` | Type/empty guard verified; Enhanced Router remains pending |
-| Enhanced Router | TBD | TBD | Unknown | TBD | |
-| Agent Planner | TBD | TBD | Unknown | TBD | |
+| Question and History | `answer_question`, `prepare_history`, `build_router_history_context` | `ui/streamlit_ui.py`, `rag/routing.py`, `rag/pipeline.py` | Partial | `tests.test_routing`; focused `tests.test_pipeline.AnswerQuestionTests`; `tests.test_streamlit_ui` | Type/empty guard; original question unchanged; six recent messages + eight older question summaries; UUID turn IDs and bounded allowlist validation. No RequestContext/session ownership or reviewed evidence storage |
+| Enhanced Router | `classify_intent`, `get_policy_and_route`, `_process_request` | `rag/routing.py`, `rag/pipeline.py` | Partial | `tests.test_routing`; focused `tests.test_pipeline.AnswerQuestionTests` | One structured call returns relationship and per-request `related_turn_ids`; invalid IDs fail closed; Python derives/enforces policy/route. Semantic quality and request-scoped evidence provenance remain unverified |
+| Agent Planner | `plan_requests` | `rag/planning.py` | Partial | `tests.test_planning`; 2026-11-16 synthetic live smoke | One structured batch call per invocation; live smoke returned two allowed proposals and excluded restricted R3; Python assigns R IDs, rechecks deterministic route, validates facts/needs/capabilities. Not pipeline-integrated because Selector is absent; no semantic source review |
 | Select Search Strategy | TBD | TBD | Unknown | TBD | |
 | Retrieval | TBD | TBD | Unknown | TBD | |
 | Dedup and Evidence Review | TBD | TBD | Unknown | TBD | |
@@ -275,8 +275,8 @@ Record a `Deviation / Decision needed` entry; don't silently rewrite the frozen 
 | Phase | State | Evidence / run / commit | Next action |
 |---|---|---|---|
 | 0. Audit + baseline | Not started | — | Inspect repository and documentation |
-| 1. Request + Router | Partial | 3 focused offline input-guard tests passed (2026-11-16; uncommitted working tree) | Enhanced Router phase |
-| 2. Planner + Selector | Not verified | — | Pending audit |
+| 1. Request + Router | Partial | 2026-11-16: 7 routing + 15 focused pipeline + 1 UI history test passed offline. Broader pipeline class: 33 run, 11 failures from stale mock call expectations/fixture; `main` @ `7af80a9`, working tree changes | Resolve session ownership/request-scoped evidence limits and verify semantic relationship quality; then Planner + Selector |
+| 2. Planner + Selector | Partial (Planner callable only) | `tests.test_planning`: 6 passed offline; live smoke 2026-11-16: one structured batch returned R1/R2, excluded restricted R3, schema/mappings/capabilities valid; QH/ER routing 7 + pipeline 33 passed; focused QH history test passes. Full Streamlit module has 3 stale UI expectation failures | Implement deterministic Selector for validated proposals; first settle shared search-budget ownership; keep retrieval path unchanged until integration |
 | 3. Retrieval | Not verified | — | Pending audit |
 | 4. Evidence + decision | Not verified | — | Pending audit |
 | 5. Bounded retry | Not verified | — | Pending audit |
@@ -288,10 +288,28 @@ This table is a workflow baseline, not a claim that existing `refactor` code has
 Phase 1 — Question and History input-guard verification:
 
 ```powershell
-.venv312\Scripts\python.exe -m unittest tests.test_pipeline.AnswerQuestionTests.test_non_text_question_returns_error_without_routing tests.test_pipeline.AnswerQuestionTests.test_empty_or_whitespace_question_returns_clarification_without_routing tests.test_pipeline.AnswerQuestionTests.test_valid_question_is_passed_to_router_unchanged
+.venv312\Scripts\python.exe -m unittest tests.test_pipeline.AnswerQuestionTests.test_non_text_question_returns_error_without_routing tests.test_pipeline.AnswerQuestionTests.test_empty_or_whitespace_question_returns_clarification_without_routing tests.test_pipeline.AnswerQuestionTests.test_valid_question_is_passed_to_router_unchanged tests.test_routing.ClassifyIntentTests.test_sends_only_bounded_recent_history_in_one_router_call
 ```
 
-Result: 3 tests passed. Pre-edit check: `test_retrieves_then_generates_and_returns_passages` fails because its mock-call expectation omits `model=None, api_key=None`, which the current pipeline passes. The full module was not run.
+Result: 4 tests passed. The full module was not run. An earlier check found a stale expectation in `test_retrieves_then_generates_and_returns_passages`; its current working-tree expectation includes `model=None, api_key=None` and passed in the Enhanced Router focused run below.
+
+Enhanced Router follow-up guard verification (2026-11-16):
+
+```powershell
+.venv312\Scripts\python.exe -m unittest tests.test_routing
+.venv312\Scripts\python.exe -m unittest `
+  tests.test_pipeline.AnswerQuestionTests.test_unresolved_follow_up_returns_clarification_without_search `
+  tests.test_pipeline.AnswerQuestionTests.test_allowed_and_restricted_requests_are_enforced_independently `
+  tests.test_pipeline.AnswerQuestionTests.test_more_than_three_or_uncertain_requests_returns_clarification_without_calls `
+  tests.test_pipeline.AnswerQuestionTests.test_follow_up_uses_resolved_context_for_search_and_generation `
+  tests.test_pipeline.AnswerQuestionTests.test_non_text_question_returns_error_without_routing `
+  tests.test_pipeline.AnswerQuestionTests.test_empty_or_whitespace_question_returns_clarification_without_routing `
+  tests.test_pipeline.AnswerQuestionTests.test_valid_question_is_passed_to_router_unchanged `
+  tests.test_pipeline.AnswerQuestionTests.test_llm_route_policy_suggestions_cannot_override_restriction `
+  tests.test_pipeline.AnswerQuestionTests.test_retrieves_then_generates_and_returns_passages
+```
+
+Result: 5 routing tests and 9 focused pipeline tests passed offline. The follow-up pipeline test had stale mock-call expectations; they were corrected to include the existing `model=None, api_key=None` kwargs for router and generator calls. No production pipeline behavior changed. `test_retrieves_then_generates_and_returns_passages` already had the corrected expectations in the current working tree and passed in this run.
 
 ## 12. Required agent handoff format (Mongolian)
 

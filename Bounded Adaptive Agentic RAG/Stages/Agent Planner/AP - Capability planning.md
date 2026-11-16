@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # AP - Capability planning
 
@@ -37,7 +37,7 @@ flowchart TD
 
 ## LLM ба deterministic planning
 
-Complex request-д Planner нэг structured LLM planning call ашиглаж болох архитектурын боломжтой. Энгийн request-д deterministic default planning боломжтой. Эдгээр нь design option; аль нь ч implemented гэж үзэхгүй. Normalization болон Router ангилалд зориулсан нэмэлт LLM call энд үүсгэхгүй.
+Одоогийн implementation нь нэг user message-ийн allowed retrieval request-үүдийг **нэг structured Planner call**-д багцална; нэг request тутамд call нэмэхгүй. Allowed retrieval request байхгүй үед call хийхгүй. Энэ нь Router-ийн normalization/intent call-аас тусдаа, bounded AP call юм.
 
 ## Required ба preferred capability
 
@@ -65,7 +65,14 @@ Complex request-д Planner нэг structured LLM planning call ашиглаж б
 
 ## Current vs proposed
 
-Одоогийн runtime-д Agent Planner болон capability planning байхгүй; router-ийн `search_query`-г pipeline шууд ашигладаг. Capability-д суурилсан proposal, planning LLM/deterministic default-ийн аль аль нь proposed design хэвээр.
+`rag/planning.py` capability ID-уудыг structured proposal vocabulary болгон ашиглаж, шаардлагатай/preferred жагсаалтыг validate хийнэ. Эдгээр capability нь enabled strategy байгаа гэсэн үг биш; runtime Strategy Registry/Selector байхгүй хэвээр. Pipeline одоогоор router-ийн `search_query`-г шууд ашигладаг тул Planner callable integration pending.
+
+## Implementation status (as built)
+
+- Status: partial. `CAPABILITY_DESCRIPTIONS` нь note-ийн зургаан capability ID-г canonical Planner vocabulary болгон өгч, structured output болон Python validation-д ашиглана.
+- Model capability ID-г зөвхөн catalog-аас сонгоно. Python unknown/duplicate болон нэгэн зэрэг required/preferred болсон ID-г reject хийнэ.
+- Limits: capability proposal нь capability availability батлахгүй; Strategy Registry болон capability matching хэрэгжээгүй. `dependency_aware_search`, `metadata_scoping` зэрэг proposal-д Selector бодит боломжийг цааш шалгах ёстой. Live smoke нь сонгосон capability-г registry/provider дээр ажиллаж байгааг нотлоогүй.
+- Verification: `tests.test_planning` 6 passed offline; 2026-11-16 live smoke-д хоёр proposal-ын capability ID-ууд catalog-д таарч, validation давсан.
 
 ## Navigation
 

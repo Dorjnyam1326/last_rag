@@ -1,11 +1,11 @@
 import json
+from uuid import uuid4
 
 import streamlit as st
 from openai import OpenAIError
 
 from rag.pipeline import answer_question
 from rag.retrieval import MAX_REUSABLE_PASSAGES
-from rag.routing import MAX_HISTORY_MESSAGES
 
 
 def _render_citations(citations: list[dict]) -> None:
@@ -17,6 +17,22 @@ def _render_citations(citations: list[dict]) -> None:
                 f" · {citation['request_id']}" if citation.get("request_id") else ""
             )
             st.caption(f"{citation['source_id']}{request} · {citation['filename']}")
+
+
+def _ensure_turn_ids(history: list[dict]) -> None:
+    active_turn_id = None
+    for message in history:
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "user":
+            turn_id = message.get("turn_id")
+            if not isinstance(turn_id, str) or not turn_id.strip():
+                turn_id = uuid4().hex
+                message["turn_id"] = turn_id
+            active_turn_id = turn_id
+        elif message.get("role") == "assistant" and active_turn_id:
+            if message.get("turn_id") != active_turn_id:
+                message["turn_id"] = active_turn_id
 
 
 def _render_single_result(result: dict) -> None:
@@ -63,6 +79,7 @@ def render_app() -> None:
     )
     st.session_state.setdefault("chat_history", [])
     history = st.session_state.chat_history
+    _ensure_turn_ids(history)
 
     st.title("Ажлын байрны бодлогын туслах", icon=":material/chat:")
     st.caption(
@@ -133,7 +150,7 @@ def render_app() -> None:
                 with st.spinner("Баримт хайж, хариулт боловсруулж байна…"):
                     result = answer_question(
                         question,
-                        history=history[-MAX_HISTORY_MESSAGES:],
+                        history=history,
                     )
             except RuntimeError:
                 st.error("Vector Store-ийн тохиргоог шалгана уу.")
@@ -148,9 +165,11 @@ def render_app() -> None:
                 return
             _render_result(result)
 
+        turn_id = uuid4().hex
         assistant_message = {
             "role": "assistant",
             "content": result["answer"],
+            "turn_id": turn_id,
             "citations": result["citations"],
             "status": result["status"],
             "passages": result.get("passages", [])[:MAX_REUSABLE_PASSAGES],
@@ -160,6 +179,6 @@ def render_app() -> None:
                 {**item, "passages": []} for item in result["results"]
             ]
         st.session_state.chat_history = history + [
-            {"role": "user", "content": question},
+            {"role": "user", "content": question, "turn_id": turn_id},
             assistant_message,
         ]

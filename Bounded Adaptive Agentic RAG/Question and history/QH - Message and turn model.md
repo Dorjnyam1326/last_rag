@@ -1,6 +1,6 @@
 ---
 tags: [rag, context, data-model]
-status: proposed-contract
+status: design-finalized-implementation-partial
 ---
 # QH - Message and turn model
 
@@ -54,6 +54,13 @@ flowchart TD
 - `refactor`: эхлээд Streamlit `session_state`-ийн turn records, **DB шаардлагагүй**.
 - Production систем: хэзээ нэгтгэхээр шийдвэл өмнөх existing AskLog/session-ийн ID дээр концепцоор mapping хийж болно. **Одоогийн RAG Admin-д schema эсвэл код өөрчлөхгүй**.
 - ID-г зөвхөн local session-ийн namespace-д тогтвортой ашиглах; ID-г асуултын текстээс тооцохгүй.
+
+## Implementation status (as built)
+
+- Status: partial. Streamlit user message-д `uuid4().hex` turn ID үүсгэж, тухайн assistant message-д ижил ID өгнө. `answer_question()`-д шууд хуучин format history өгсөн бол QH түр `legacy-turn-{index}` ID оноож context validation-д хэрэглэнэ.
+- Runtime-д `session_id`, `message_id`, `request_id`, `topic_id` тусдаа field хэлбэрээр хадгалагдахгүй. `request_id` нь downstream multi-request result-д байдаг ч turn model-д persistent ID биш.
+- Verified: `tests.test_streamlit_ui.StreamlitUiTests.test_streamlit_passes_full_history_with_stable_turn_ids_to_pipeline` олон turn-ийн ID тогтвортой, pair бүр ижил ID-тай дамжиж байгааг шалгана.
+- Limits: Streamlit session state-ээс гадуурх persistence болон caller history-ийн ownership validation байхгүй.
 
 ## Related
 
