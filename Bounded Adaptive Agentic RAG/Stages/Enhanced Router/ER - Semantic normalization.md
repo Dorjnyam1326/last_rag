@@ -53,7 +53,8 @@ Enhanced Router эдгээр input-ийг existing нэг structured LLM call д
 
 - Status: partial. `classify_intent()` sends the original question, up to six recent messages, and up to eight older question summaries to the existing single structured Router call; its prompt directs normalization into `search_query` and context-aware `resolved_question` without another LLM call.
 - Verified: offline routing tests confirm the original question is unchanged, recent/candidate context is bounded and serialized, and one structured invocation is used (`tests.test_routing`: 7 passed, 2026-11-16).
-- Not verified: Cyrillic/Latin/English meaning preservation, typo correction, negation/number fidelity, and source-grounded semantic quality. Prompt text and mocked output do not establish those outcomes.
+- Live handoff evidence: C07 Latin-input pipeline smoke returned a mostly Cyrillic Router `search_query` while `resolved_question` remained Latin; the initial Selector/Retrieval query exactly matched `search_query`. This verifies use/transport of Router normalization, not translation correctness or retrieval relevance.
+- Not verified: Cyrillic/Latin/English meaning preservation, typo correction, negation/number fidelity, and source-grounded semantic quality. Prompt text and a single live output do not establish those outcomes.
 - Dependency/gap: older reference resolution is now technically supported only within the bounded catalogue; semantic accuracy remains unverified, and references beyond the latest eight older candidates cannot be resolved from this input.
 
 ## Navigation

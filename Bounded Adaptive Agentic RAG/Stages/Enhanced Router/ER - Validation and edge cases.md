@@ -28,7 +28,7 @@ Input validation нь **semantic understanding хийхгүй**. Output schema v
 Router output-ийг deterministic Python талд шалгана:
 
 - schema, `route` болон `policy` зөвшөөрөгдсөн утгатай эсэх;
-- request count гурван request-ийн limit-д нийцсэн эсэх;
+- greeting-ийг тусгаарласны дараа гурваас олон агуулгын request үлдээгүй эсэх; агуулгын хүсэлттэй мессежид нэг greeting-ийг эхний мэндчилгээ болгон харуулж болно;
 - бүх retrieval request-ийн `resolved_question` хоосон биш эсэх;
 - `related_turn_ids` candidate allowlist, зөв session/conversation, current turn-ээс өмнөх нөхцөлийг хангаж байгаа эсэх;
 - restricted request-ийн context/result allowed request рүү холилдоогүй эсэх.
@@ -48,11 +48,13 @@ Malformed output эсвэл invalid reference дээр буруу context-ийг
 7. `Өмнөх хоёр журмын ялгаа юу вэ?` → cross-reference, хэд хэдэн `related_turn_ids`.
 8. `Тэр хүсэлтийг хаана гаргах вэ?` → хэд хэдэн боломжит referent байвал clarification.
 9. `Ээлжийн амралт хэд хоног вэ?` → бие даасан асуулт бол `new`; сэдэв ижил гэдгээр follow-up болохгүй.
+10. `hi, payday, my salary amount, salary raise procedure` → эхний greeting, дараа нь хоёр зөвшөөрөгдсөн procedure answer; хувь хүний дүнгийн request тусдаа restriction авна. Энэ нь гурван агуулгын request гэж тоологдоно.
 
 ## Implementation status (as built)
 
-- Status: partial. Structured schema constrains intent/relationship/ID types; pipeline validates request list/count, labels, nonblank `resolved_question`, unique allowlisted turn IDs, and relationship-to-ID consistency. Invalid references fail closed to clarification.
-- Verified: `tests.test_routing` (7 passed) and 15 focused `AnswerQuestionTests` cover absent history, bounded candidates, original-question guard, ID rejection, selected-turn isolation, restrictions, and valid pipeline flow (2026-11-16; offline mocks).
+- Status: partial. Structured schema constrains intent/relationship/ID types; pipeline validates request list/count, labels, nonblank `resolved_question`, unique allowlisted turn IDs, and relationship-to-ID consistency. One mixed-message greeting is rendered as a preamble and excluded from the three-substantive-request cap. Invalid references fail closed to clarification.
+- Verified: `tests.test_routing` (7 passed), focused `AnswerQuestionTests`, and `test_leading_greeting_does_not_consume_three_request_limit` cover absent history, bounded candidates, original-question guard, ID rejection, selected-turn isolation, restriction handling, greeting plus three substantive requests, and valid pipeline flow (2026-11-16; offline mocks).
+- Latest full offline suite: `unittest discover -s tests -q` — 132 passed (2026-11-16).
 - Limits: structural validation cannot prove `resolved_question` or selected referent is semantically correct. Allowlist validation does not establish session ownership, creation time, or future-turn authorization; no `session_id` is carried.
 
 ## Navigation

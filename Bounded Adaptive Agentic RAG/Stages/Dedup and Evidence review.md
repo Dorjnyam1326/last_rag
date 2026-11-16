@@ -5,8 +5,8 @@ tags:
   - architecture
   - evidence
 status: design-complete
-implementation: pending
-validation: pending
+implementation: partial
+validation: partial
 ---
 
 # Dedup and Evidence review
@@ -116,10 +116,10 @@ Contradiction нь тусдаа `conflicts` field-д хадгалагдана.
 
 | Behavior | V1 design | Одоогийн код |
 |---|---|---|
-| Exact deduplication | Нэг file дотор ижил passage identity-г нэгтгэж, provenance хадгална | `rag/retrieval.py::deduplicate_passages` ижил raw `text`-ийг file ID харгалзахгүй нэгтгэж, зөвхөн `file_id`, `filename`, `score`, `origin` provenance хадгална |
-| Fact review | Fact бүр `supported / partial / missing` үнэлгээтэй | `rag/generation.py::review_evidence` нийт асуултад `sufficient / partial / insufficient` буцаана; per-fact mapping болон conflict field байхгүй |
-| Retrieval status | Evidence Review-д execution status дамжуулна | `rag/pipeline.py` reviewer рүү retrieval status дамжуулахгүй |
-| Output validation | Fact, passage, conflict, selected evidence ID-г шалгана | Reviewer-ийн `relevant_ids`-ийг өгсөн E-ID-уудтай шүүн тааруулдаг; бусад V1 contract хэрэгжээгүй |
+| Exact deduplication | Нэг file/version-ийн ижил passage identity-г нэгтгэж, бүх association хадгална | `rag/retrieval.py::deduplicate_passages` file ID, боломжтой version/location metadata, whitespace-normalized text fingerprint ашиглана; өөр file/version/location-ийг салгаж, query matches болон source attributes-ийг нэгтгэнэ |
+| Fact review | Fact бүр `supported / partial / missing` үнэлгээтэй | `rag/generation.py::review_evidence` validated required facts болон information needs-ийг нэг structured call-д өгч, fact бүрт evidence IDs буцаана |
+| Retrieval status | `success`, `empty`, `partial_error`, `error` ялгааг хадгална | `rag/pipeline.py` `success`, `empty`, `partial_error`-ийг reviewer-д дамжуулна; total error болон evidence-гүй partial error-д review хийхгүй |
+| Output validation | Fact, passage, conflict, selected evidence ID-г шалгана | Python бүх fact/need хамрагдсан эсэх, fact/evidence/conflict ID, schema, status, давхардлыг шалгана; selected IDs-ийг баталгаажсан mapping-оос гаргана |
 
 Иймээс доорх `EvidenceAssessment` нь proposed contract; одоогийн reviewer-ийн яг output schema биш.
 
@@ -178,11 +178,21 @@ Contradiction нь тусдаа `conflicts` field-д хадгалагдана.
 | Per-fact review and conflict representation design | Design Complete |
 | EvidenceAssessment contract | Design Complete |
 | Current Python behavior alignment | Incomplete |
-| V1 Python implementation | Pending |
-| LLM runtime validation | Pending |
-| Regression testing | Pending |
+| V1 Python implementation | Partial; integrated in `answer_question` |
+| LLM runtime validation | Pending; no live Evidence Review call in this phase |
+| Regression testing | Focused offline suite passed; full-suite failures remain |
 
-**DESIGN COMPLETE — IMPLEMENTATION AND VALIDATION PENDING**
+## Implementation status (as built)
+
+- `deduplicate_passages()` now uses `file_id + version/location metadata + SHA-256 of whitespace-normalized text`. If the current Vector Store adapter supplies no stable location/version metadata, the documented text fingerprint is the fallback. Different files, versions, and known locations remain separate; original text is unchanged.
+- Duplicate occurrences merge `retrieval_matches` (query ID, rank, score, targets), preserve source attributes in `source_provenance`, and union fact targets. Missing `file_id` is not guessed, so such passages are retained independently.
+- Pipeline reassigns stable `P1...` IDs after dedup and passes the validated request facts, information needs, source/query provenance, and Retrieval status to `review_evidence()`.
+- One structured LLM call assesses every planned fact as `supported`, `partial`, or `missing`, identifies conflicts, and returns the legacy `retry_query` field. Python validates exact schema, complete fact coverage, need targets, and all fact/evidence/conflict IDs. The pipeline does not use that reviewer suggestion for retrieval; [[Targeted retry within budget]] builds the query from validated unresolved facts, Planner needs, and `missing_detail`. The Reviewer returns selected evidence IDs and review/retrieval status; [[Evidence sufficient]] owns the separate Yes/No decision.
+- `empty` successful retrieval returns missing assessments without an LLM call. Total `error`, or `partial_error` without usable passages, returns an unavailable/error assessment. `partial_error` with passages reviews only available evidence and remains partial; it does not imply corpus absence.
+- **Verified:** `.venv312\Scripts\python.exe -m unittest tests.test_pipeline tests.test_generation.ReviewEvidenceTests` — 47 passed. Current full suite: 114 tests, 109 passed, the same 5 Generation/UI assertion failures seen in the prior 110-test run, and no errors. No live Evidence Review or semantic-quality evaluation was run.
+- **Limits:** the Vector Store adapter currently returns no stable chunk/location or document-version metadata, so fallback identity can merge repeated identical text at different locations within one file. No reviewer token-budget/truncation report exists. LLM semantic judgments, version authority, and citation correctness remain unverified. The deterministic EvidenceDecision is a downstream pipeline step, not part of the Reviewer output.
+
+**PARTIAL — PYTHON IMPLEMENTED AND OFFLINE VERIFIED; SEMANTIC VALIDATION PENDING**
 
 ## 9. Related
 

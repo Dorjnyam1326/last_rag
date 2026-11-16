@@ -5,9 +5,9 @@ tags:
   - architecture
   - grounding
   - citations
-status: design-complete
-implementation: alignment-pending
-validation: pending
+status: partial
+implementation: partial
+validation: offline-and-live-smoke-verified
 ---
 
 # Grounded answer and citations
@@ -22,7 +22,7 @@ validation: pending
 
 Энэ component нь шинэ хариулт зохиох, баримт хайх, evidence-г LLM-ээр дахин үнэлэхгүй. **V1-д 0 LLM call, 0 Vector Store search call** ашиглана.
 
-**Status: DESIGN COMPLETE — IMPLEMENTATION ALIGNMENT / VALIDATION PENDING**
+**Status: DESIGN COMPLETE — IMPLEMENTATION PARTIAL; SEMANTIC VALIDATION PENDING**
 
 ## 2. Architecture Position
 
@@ -283,13 +283,27 @@ Conceptual application result:
 | Citation metadata resolution | Design Complete |
 | Output formatting and advice | Design Complete |
 | Multi-intent isolation | Design Complete |
-| Existing code/schema alignment | Pending |
-| Unit/regression verification | Pending |
-| Runtime citation/preview-link verification | Pending |
+| Existing code/schema alignment | Partial; AnswerDraft-to-public-result bridge integrated |
+| Unit/regression verification | Offline suite passed; full suite passed |
+| Runtime citation/preview-link verification | Citation metadata mapping smoke-tested; source correctness/preview links unverified |
 
 Verification хийхдээ existing small regression questions-ийг ашиглаж, шинэ benchmark/framework байгуулахгүй.
 
-**DESIGN COMPLETE — IMPLEMENTATION ALIGNMENT / VALIDATION PENDING**
+**DESIGN COMPLETE — IMPLEMENTATION PARTIAL / SEMANTIC VALIDATION PENDING**
+
+## Implementation status (as built)
+
+- Status: partial — deterministic AnswerDraft validation/rendering is integrated into `answer_question()` and offline/live smoke verified; semantic groundedness is not proven.
+- Last checked: 2026-11-16.
+- Code owners: `rag/answer_output.py::ground_answer`, `rag/answer_output.py::renumber_multi_request_citations`, `rag/pipeline.py::_process_request`, `rag/pipeline.py::answer_question`, and `ui/streamlit_ui.py::_render_citations`.
+- Input → processing → output: one structured `AnswerDraft` + validated final assessment/decision + selected passages → Python validates request/fact/evidence references and outcome consistency, resolves trusted file metadata, numbers citations, renders the answer → existing public `answer/citations/status` result. Public `answer_question()` signature is unchanged.
+- Verified behavior: factual items must reference evidence selected for that fact; unknown/cross-request references fail closed. Citation labels follow first-use order, multi-request labels are globally renumbered, and `evidence` includes only passages cited in the rendered result. UI displays `[label]` and retains `source_id` fallback. Invalid drafts do not leave an uncited factual statement in the answer.
+- Call bound: 0 additional LLM calls and 0 Vector Store calls for validation/rendering. C05 live used 1 Router, 1 Planner, 1 Reviewer, 1 Generation, and 1 Vector Store search; its final answer contained five ordered citations with passage/file/name metadata. C01 live returned `insufficient` without claim or citation after a missing-fact assessment. C21 live returned partial with no draft evidence references, so it did not exercise citation rendering.
+- Tests: `.venv312\Scripts\python.exe -m unittest discover -s tests -q` — 130 passed. `compileall -q rag ui evaluation` and `git diff --check` passed. Focused tests cover answered/partial/insufficient consistency, invalid fact/passage IDs, conflict-only limitation, advice rules, provenance, multi-request numbering, pipeline handoff, and UI labels.
+- Limitations: ID and registry validation do not prove that a cited passage semantically entails the generated claim. C05's five references were not manually checked for relevance or redundancy. No verified page, section, or URL is available from the provider, so none is shown. Live smoke is not a quality evaluation; Evaluation metrics were not changed.
+- Live correction: a C01 attempt returned a valid `insufficient` draft that the initial implementation incorrectly rejected when review context contained unresolved evidence conditions. The renderer now permits an evidence-free `insufficient` result when all facts remain unresolved and no factual blocks are emitted; `partial` requires at least one supported or qualified factual item. A subsequent C01 live run returned `insufficient` without error.
+- Remaining gaps: human source/claim/citation review, live citation coverage for follow-up and multi-intent cases, source URL/page/section links if provider metadata later supports them, and end-to-end parity evaluation.
+- Next: manually inspect the C05 output and its five source passages; then run the dedicated end-to-end parity phase. Do not claim production readiness or semantic citation correctness from this smoke.
 
 ## 16. Related
 

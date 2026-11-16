@@ -38,7 +38,7 @@ flowchart LR
 
 ## Responsibilities and Boundaries
 
-Planner intent/follow-up/policy дахин ангилахгүй, strategy ID сонгохгүй, budget enforce хийхгүй, Vector Store search/review хийхгүй, эцсийн хариулт үүсгэхгүй. Одоогийн callable нэг batch structured LLM call ашиглана; allowed retrieval request байхгүй үед call алгасна. Энэ нь pipeline-д холбогдоогүй тул `answer_question()`-ийн одоогийн search behavior өөрчлөгдөөгүй.
+Planner intent/follow-up/policy дахин ангилахгүй, strategy ID сонгохгүй, budget enforce хийхгүй, Vector Store search/review хийхгүй, эцсийн хариулт үүсгэхгүй. Pipeline нь Router-ийн deterministic policy check-ийн дараа `plan_requests()`-ийг нэг удаа дуудаж, allowed retrieval request-үүдийн `PlanningProposal[]`-г Selector-д дамжуулна. Allowed request байхгүй үед Planner model call алгасна.
 
 ## Algorithm Overview
 
@@ -62,11 +62,11 @@ flowchart TD
 
 - Status: partial
 - Code owner: `rag/planning.py::plan_requests`
-- Behavior verified: Router requests-ээс Python policy/route-г дахин бодож, зөвхөн allowed retrieval request-үүдийг сонгоно. Python `R1`/`R2`/`R3` ID-г эх request-ийн дарааллаар оноож, нэг structured call-д бүгдийг багцална. Fact/need ID, target холбоос, capability болон request identity-г Python шалгана.
-- Call bound: `plan_requests()` invocation бүрд хамгийн ихдээ нэг Planner call; Router-ийн дээд талын 3 request-ээс илүүг хүлээж авахгүй. Энэ callable-ийг pipeline одоогоор дуудахгүй.
-- Tests: `tests.test_planning` (6 passed, mocked/offline); QH/ER routing 7 and pipeline 33 passed; focused QH history UI test passed. 2026-11-16 live smoke (`gpt-6-luna`): нэг structured batch-д хоёр synthetic allowed request proposal авч, restricted R3-г хассан; ID/target/capability contract valid.
-- Limitations: Selector/runtime consumer байхгүй тул PlanningProposal нь pipeline-д ашиглагдаагүй. Capability catalog нь proposal vocabulary болохоос enabled strategy-ийн баталгаа биш. Live smoke нь schema/functionality-г шалгасан болохоос fact decomposition-ийн semantic correctness-ийг эх сурвалжаар батлаагүй.
-- Next: Selector phase-д энэ callable-ийн validated proposals-ийг хэрэглэж, executable query төлөвлөгөөтэй холбох.
+- Behavior verified: `answer_question()` Router-оос баталгаажсан request-үүдийг `plan_requests()`-д нэг удаа batch-аар өгнө. Python policy/route-г дахин тооцож, зөвхөн allowed retrieval request-үүдэд эх request-ийн дарааллын `R1`/`R2`/`R3` ID онооно. Fact/need ID, target холбоос, capability болон request identity-г Python шалгаад Selector-д дамжуулна.
+- Call bound: Нэг user message-д хамгийн ихдээ нэг structured Planner call; нэгээс гурван routed request-ийг нэг batch-д боловсруулна. Allowed retrieval request байхгүй бол model call хийхгүй. Proposal-ийг public answer result-д нэмэхгүй.
+- Tests: `.venv312\Scripts\python.exe -m unittest tests.test_pipeline.AnswerQuestionTests tests.test_retrieval tests.test_planning tests.test_selection tests.test_routing tests.test_live_evaluation -q` — 86 passed offline. 2026-11-16 live integrated smoke (`gpt-6-luna`): C01/C07/C21 тус бүр нэг Router request-ээс нэг validated proposal (1 fact, 1 need) гаргаж, downstream Selector/Retrieval-д дамжсан.
+- Limitations: Capability catalog нь Planner vocabulary болохоос бүх capability-г Selector дэмждэг гэсэн баталгаа биш; unsupported required capability limitation болно. Live smoke fact decomposition-ийн semantic correctness-ийг эх сурвалжаар батлаагүй; multi-request Planner batch pipeline-ээр live шалгагдаагүй.
+- Next: Dedup and Evidence Review contract-ийг query/fact association болон Retrieval status-тай хэрхэн холбохыг хэрэгжүүлж, шалгах.
 
 ## Related Components
 

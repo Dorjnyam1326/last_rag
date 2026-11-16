@@ -62,8 +62,8 @@ Resolved question: `Менежер эзгүй үед 3 цагийн чөлөөг
 
 - Status: partial. `plan_requests()` нэг request-ийн `resolved_question`-оос required facts болон information needs гаргах structured Planner call ашиглана. Need бүрийн `targets` нь тухайн proposal-ийн fact ID байхыг Python validate хийнэ.
 - Input-д `related_turn_ids`, prior raw passages, Router-ийн policy/route санал дамжуулахгүй. Fact ба need нь request ID-аар тусгаарлагдана.
-- Verification: offline tests single-fact planning, нэг request доторх олон fact/need mapping, multi-request isolation болон invalid target-уудыг шалгана (`tests.test_planning`: 6 passed). 2026-11-16 live smoke-д хоёр synthetic request тус бүр нэг fact/need гаргаж, target mapping validation давсан.
-- Limits: live smoke-ийн fact/need-үүд эх сурвалжтай тулгагдаагүй тул semantic чанар батлагдаагүй; Planner pipeline-д хараахан холбогдоогүй.
+- Verification: offline tests single/multiple fact, need target, request isolation болон invalid proposal-уудыг шалгана; интеграцийн focused suite 86 passed. 2026-11-16 C01/C07/C21 live integrated smoke-д бодит Router request бүрд нэг fact/need proposal Selector болон Retrieval-д хүрсэн.
+- Limits: Live fact/need-үүдийг authoritative source-той тулгаагүй; semantic чанар батлагдаагүй. Live run нь нэг request/case-тэй, multi-request fact isolation-ийг pipeline-ээр live шалгаагүй.
 
 ## Navigation
 

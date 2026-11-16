@@ -80,8 +80,8 @@ Selector-д дамжуулахын өмнө deterministic validation дараа�
 
 - Status: partial. `plan_requests()` allowed retrieval request бүрд нэг validated dictionary proposal буцаана. Router-аас ирсэн `policy`/`route`-д итгэхгүй; intent-ээс Python-д дахин тооцно.
 - Request ID: Python эх `requests[]`-ийн ordinal-аас `R1`–`R3` онооно. Restricted request алгасагдсан ч дараагийн ID pipeline-ийн request numbering-тэй таарна.
-- Verification: `tests.test_planning` 6 passed offline. 2026-11-16 live smoke-д нэг structured call хоёр allowed request (`R1`, `R2`)-д proposal буцааж, restricted `R3`-г хассан; шаардлагатай field, target болон capability шалгалт тэнцсэн.
-- Limit: Selector байхгүй тул proposal pipeline-д хэрэглэгдэхгүй; `answer_question()` public output-д нэмээгүй. Live smoke нь synthetic бөгөөд fact-ийн эх сурвалжийн үнэн зөвийг шалгаагүй.
+- Verification: `tests.test_planning` болон pipeline integration-ийг багтаасан focused offline suite — 86 passed. 2026-11-16 C01/C07/C21 live integrated smoke-д Planner proposal-ууд дараагийн Selector/Retrieval stage-д ашиглагдсан; restricted request-д хайлт эхлүүлээгүй.
+- Limit: Proposal `answer_question()` public output-д орохгүй. C01/C07/C21 нэг allowed request-тэй smoke бөгөөд fact-ийн эх сурвалжийн үнэн зөв, multi-request live isolation-ийг шалгаагүй.
 
 ## Contract-ийн зааг
 

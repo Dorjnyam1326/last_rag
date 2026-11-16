@@ -1,11 +1,11 @@
 ---
 tags: [rag, agentic-rag, strategy]
-status: design-complete-implementation-pending
+status: design-complete-implementation-partial
 ---
 # Select Search Strategy
 
 > [!note] Төлөв
-> **DESIGN COMPLETE / IMPLEMENTATION PENDING.** Энэ hub нь component-ийн ажлыг нэгтгэнэ; V1-ийн дэлгэрэнгүй algorithm, budget, validation болон жишээнүүдийг subnote-уудад бүрэн шилжүүлсэн.
+> **DESIGN COMPLETE / IMPLEMENTATION PARTIAL.** Hub нь component-ийн ажлыг нэгтгэнэ; V1-ийн дэлгэрэнгүй algorithm, budget, validation болон жишээнүүдийг subnote-уудад хадгалсан.
 
 ## Purpose
 
@@ -74,7 +74,7 @@ flowchart TD
 
 ## Current Status
 
-Одоогийн runtime-д Agent Planner, capability registry/matching болон `SearchPlan` байхгүй. Pipeline router-ийн `search_query`-г OpenAI Vector Store-д ашиглаж, evidence review дараа нэг targeted retry хийж болно.
+`answer_question()` одоо Router → нэг batch Planner → нэг batch deterministic Selector → төлөвлөгөөт Retrieval дарааллаар ажиллана. Router-ийн normalized `search_query` байвал Selector initial query-ийн үндэс болгоно; байхгүй/хоосон үед validated `resolved_question`-д fallback хийнэ. Follow-up context-тэй `resolved_question` нь Planner, review, generation-д хэвээр ашиглагдана. Retrieval-ийн дараа одоогийн Evidence Review болон нэг targeted retry ажиллаж болох бөгөөд retry нь initial query-үүдтэй shared budget хэрэглэнэ.
 
 [[Question taxonomy]]-ийн D хэмжээсийн summary хүснэгтэд Agent Planner-ийг retrieval strategy owner гэж заасан хуучин мөр үлдсэн. Энэ migration-д shared canonical note-ийг өөрчлөхгүй; final capability-based boundary нь Planner capability санал болгож, энэ Selector strategy implementation сонгох юм.
 
@@ -90,11 +90,25 @@ flowchart TD
 | `multi_query` design | Design Complete |
 | Budget and fallback rules | Design Complete |
 | `SearchPlan` contract and validation | Design Complete |
-| Python implementation | Pending |
-| Regression validation | Pending |
+| Python implementation | Partial; pipeline-integrated Selector |
+| Offline regression validation | Partial; focused contract tests pass |
 | Runtime quality verification | Pending |
 
 Design Complete гэдэг нь implementation эсвэл quality verification дууссан гэсэн үг биш. Implementation үед budget-ийн exact configuration, deterministic query construction-ийн effectiveness, multi-query coverage, allocation болон fallback behavior-ийг regression validation-аар батална. Эдгээр нь design-ийг дахин нээх асуудал биш, баталгаажуулах pending зүйлс.
+
+## Implementation status (as built)
+
+- Status: partial (pipeline integrated; offline and two-case live smoke verified)
+- Code owner: `rag/selection.py::select_search_plans`
+- Input: validated `PlanningProposal[]`, `request_id`-гаар тааруулсан `resolved_questions` mapping, caller-аас өгсөн `remaining_search_budget`.
+- Behavior verified: `single_query` нэг operation; `multi_query` хоёр operation. Required capability-г бүрэн хангадаг strategy-г сонгож, request дарааллаар minimum plan болон дараа нь боломжтой preferred multi-query upgrade хуваарилна. Бүх fact query target-д орсон эсэх, query ID/text/duplicate, strategy count, per-query limit болон өгсөн budget-ийг шалгана.
+- Output contract: request бүр `planned` + `search_plan` эсвэл `planning_limitation` result болно. SearchPlan-н query ID нь тухайн plan дотор Q1/Q2.
+- Query source: Pipeline нь nonblank Router `search_query`-г request ID-аар mapping хийнэ; байхгүй/blank үед `resolved_question`-ийг өгнө. Selector-д mapping өгсөн бол бүрэн, nonblank байхыг validate хийнэ; standalone callable-д mapping орхивол `resolved_question` query base болно. Query-г дахин LLM-ээр normalize хийхгүй.
+- Budget owner: `answer_question()` нь allowed Planner proposal бүрд `3` operation буюу `2` хүртэл planned query + `1` targeted retry-ийг тооцно. Нэг shared mutable counter нь Selector-д initial budget өгч, planned болон retry provider call бүрийн өмнө хасагдана. Энэ нь fixed four-call cap биш; 1–3 allowed proposal-д дээд тал нь 3–9 operation, нэг `answer_question()` invocation хүрээнд.
+- Tests: 86 focused offline tests passed, үүнд pipeline batch Planner/Selector/Retrieval, normalized-query fallback, restriction exclusion, multi-query + нэг retry, partial retrieval error шалгалтууд орно. C01/C21 live smoke normalized-query mapping нэмэхийн өмнө ажилласан бөгөөд хоёр case-д Router `search_query == resolved_question` байсан. C07 smoke шинэ mapping-ийн дараа ажиллаж, утга ялгаатай үед initial query Router `search_query`-тай яг таарсныг баталсан. Гурван case `single_query` сонгож, 5/5/4 initial passages авч, нэг нэг retry хийгээд `partially_answered` болсон.
+- Limitations: Live run зөвхөн single-query шалгасан; multi-query зөвхөн offline integration test-ээр шалгагдсан. Query semantic relevance, evidence support, citations-ийг хүнээр шалгаагүй. Provider availability-г Selector динамикаар шалгахгүй.
+- Architecture deviation: multi-query текстэд resolved question-ийг яг хэвээр нь оруулаад need focus-ийг залгана; ингэснээр query өмнөх numeric/actor/negation constraints-ийг хасахгүй. Энэ нь design example-үүдээс урт query үүсгэж болох ба relevance нь unverified.
+- Next: Query/fact association ба retrieval error state-ийг Dedup and Evidence Review рүү аюулгүй дамжуулахыг хэрэгжүүлж, шалгах.
 
 ## Related Components
 

@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # SS - Budget and fallback
 
@@ -45,6 +45,15 @@ V1-ийн allowed fallback: `multi_query → single_query`, зөвхөн:
 Required capability-г өөр enabled strategy хангахгүй бол downgrade хийж биелүүлсэн гэж тэмдэглэхгүй; `planning_limitation` гаргана. Strategy байхгүй үед fallback байхгүй.
 
 Fallback нь **retrieval-ээс өмнөх** Strategy Selector decision. Corrective retry нь **evidence review-ийн дараа** missing evidence-д чиглэсэн өөр component-ийн action ([[Targeted retry within budget]]). Evidence insufficient болон provider execution error нь Selector-ийн strategy fallback нөхцөл биш. Retry/budget ownership-ийг өөрчлөхгүй.
+
+## Implementation status (as built)
+
+- Status: partial; integrated. `answer_question()` нь allowed Planner proposal бүрд 3 operation (`2` хүртэл initial planned query + `1` retry) тооцож, нийт `3 × allowed proposal count`-ыг `select_search_plans(..., remaining_search_budget=...)` руу дамжуулна. Fixed four-call cap ашиглахгүй.
+- Proposal-уудыг `R` ordinal дарааллаар авч, required capability-г хангах minimum search cost-ийг эхэлж хуваарилна. Дараа нь үлдсэн operation-оор боломжтой preferred multi-query-г ижил дарааллаар upgrade хийнэ. Шаардлагатай cost багтахгүй request бүр explicit limitation авна.
+- Multi-query required үед budget хүрэхгүй бол single-query fallback хийхгүй. Multi-query зөвхөн preferred үед боломжгүй бол single-query plan fallback reason-той гарна.
+- Verification: `tests.test_selection` ба pipeline integration test-үүдийг багтаасан focused offline suite 86 passed. Multi-query initial 2 call болон нэг distinct retry shared counter-ийн хүрээнд ажиллах, хоёр query-ийн нэг нь алдаа өгөхөд амжилттай passage үлдэхийг шалгасан. C01/C07/C21 live integrated smoke тус бүр нэг initial + нэг retry search хийсэн.
+- Runtime enforcement: Selector бүх proposal-д initial plan allocation-ийг budget-аас хэтрүүлэхгүй. Pipeline ижил counter-оос initial болон retry provider call бүрийн өмнө нэгийг хасна; budget дууссан үед retry алгасна. Provider error гарсан ч эхлүүлсэн operation budget хэрэглэсэнд тооцогдоно.
+- Limits: Counter нь нэг `answer_question()` invocation буюу нэг user message-д үйлчилнэ; session/daily эсвэл cross-message controller байхгүй. Live multi-query search хийгдээгүй.
 
 ## Navigation
 

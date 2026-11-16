@@ -6,8 +6,8 @@ tags:
   - retrieval
   - retry
 status: design-complete
-implementation: pending
-validation: pending
+implementation: partial
+validation: partial
 ---
 
 # Targeted retry within budget
@@ -29,7 +29,7 @@ validation: pending
 - Нийт search budget-ийг хэтрүүлэхгүй.
 - Нэмэлт evidence олдохгүй бол таамгаар хариулт зохиохгүй.
 
-**Status: DESIGN COMPLETE — IMPLEMENTATION / VALIDATION PENDING**
+**Status: DESIGN COMPLETE — TARGETED PYTHON PATH AND ONE LIVE RETRY/REVIEW SMOKE VERIFIED; SEMANTIC VALIDATION PENDING**
 
 ---
 
@@ -558,10 +558,25 @@ Semantic evidence correctness нь existing Evidence Reviewer-ийн responsibil
 | Search budget architecture | Design Complete |
 | Exact budget tuning | Experiment Pending |
 | Dynamic time/token budget | Future |
-| Python implementation | Pending |
-| Regression validation | Pending |
+| Python implementation | Partial — deterministic unresolved-fact/need targeting, query provenance, shared budget, and RetryOutcome are integrated |
+| Regression validation | Offline and runtime-smoke verified — focused suite: 97 passed; C21 exercised one targeted retry and second review; full suite: 119 tests, 114 passed, five Generation/UI assertion failures; semantic quality pending |
 
-**DESIGN COMPLETE — IMPLEMENTATION / VALIDATION PENDING**
+## Implementation status (as built)
+
+- Status: partial — pipeline-integrated, offline verified, and one live retry/re-review smoke passed; semantic validation pending.
+- Code owners: `rag.pipeline::_targeted_retry`, `rag.pipeline::_process_request`, and `rag.pipeline::_search_passages`.
+- Eligibility and targeting: a No decision retries only `partial`/`missing` fact assessments listed as unresolved. The pipeline chooses the first Planner information need that targets those facts; supported facts and conflict-only facts are excluded. A `partial_error` with no unresolved fact target skips retry and retains the retrieval limitation.
+- Query: Python joins the selected need focus, each targeted fact's `missing_detail`, and the `resolved_question`, removing only duplicate whole segments and normalizing whitespace. It preserves numbers, dates, negation, and other wording; the Evidence Reviewer's `retry_query` is not used to authorize or construct retrieval. A case-folded whitespace-normalized exact duplicate check compares against initial query text.
+- Execution and metadata: at most one query with ID `RQ1` is run per request through the existing `_search_passages`/`search_documents` wrapper, with the existing eligible-file filter and Top-5 limit. New results carry `RQ1`, rank, and only the selected unresolved fact IDs; existing dedup merges query associations and source provenance.
+- Outcome: each processed retrieval request returns an additive `retry_outcome` object with request ID, `performed`/`skipped`/`failed`, target fact IDs, retry query ID, new unique passage IDs, calls used, and a reason. `answer_question()`'s public signature is unchanged.
+- Updated review: if at least one new unique passage arrives, the existing reviewer receives the deduplicated initial + retry evidence once, then EvidenceDecision is recomputed once. Duplicate-only and empty retry results keep the prior assessment and do not trigger another Reviewer call. No second retry loop is present.
+- Budget: `answer_question()` creates one message-level counter at `3 × allowed proposal count` for up to two initial queries plus one retry per allowed request. Every planned and retry provider attempt consumes it; this is not a fixed four-call or cross-message cap. Budget exhaustion is an explicit skipped outcome.
+- Failure behavior: empty retry results are `performed` with `empty_results`, and keep the existing retrieval status. Retry provider failures are `failed`, preserve initial passages, set `retrieval_status=partial_error` and `retry_error_type`, and are not treated as missing evidence. Initial Retrieval `error` or `partial_error` without passages still stops before review/generation. Initial `partial_error` remains visible after a successful retry because the earlier provider failure is unresolved.
+- Verification: focused offline suite `.venv312\Scripts\python.exe -m unittest tests.test_pipeline tests.test_routing tests.test_planning tests.test_selection tests.test_retrieval tests.test_generation.ReviewEvidenceTests` — 97 passed. Full suite: 119 tests, 114 passed, 5 Generation/UI assertion failures, no errors; the same five were recorded in the prior 114-test run, but there is no clean pre-change baseline. Live C21 follow-up smoke on 2026-11-16: route/action checks passed; 1 initial Vector Store search returned 5 results, then one `RQ1` retry targeting `F1` returned 5 results, of which 4 became new unique passages (`P6`–`P9`). Reviewer ran twice; the second review selected initial evidence IDs `P2`,`P5` together with retry evidence `P7`–`P9`. Generation ran once and returned `partially_answered` with 2 citations. Totals: 1 Router, 1 Planner, 2 Reviewer, 1 Generation, 2 Vector Store calls; 34.459 seconds; recorded spend upper-bound `$0.002904220`; no uncaught error. This verifies runtime call flow, not evidence correctness or answer quality.
+- Limits/deviations: retry uses `_search_passages` rather than `execute_search_plan()` because the executor accepts planned `Q1`/`Q2` IDs while retry uses `RQ1`; the existing provider wrapper and budget are reused. The live trace records the combined selected evidence IDs but does not record each review input passage's query/fact associations. Its Reviewer `status` field is `null` because the runner reads `status` instead of `review_status`. Query-target semantics, live Reviewer quality, source relevance, and citation correctness remain unverified.
+- Next: inspect the C21 sources/citations against authoritative documents; optionally smoke one known-sufficient case to confirm live retry skip, then proceed to Generation without treating this smoke as a quality result.
+
+**DESIGN COMPLETE — IMPLEMENTATION PARTIAL; SEMANTIC VALIDATION PENDING**
 
 ---
 

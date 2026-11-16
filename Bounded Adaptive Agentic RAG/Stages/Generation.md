@@ -4,9 +4,9 @@ tags:
   - agentic-rag
   - architecture
   - generation
-status: design-complete
-implementation: alignment-pending
-validation: pending
+status: partial
+implementation: partial
+validation: offline-and-live-smoke-verified
 ---
 
 # Generation
@@ -32,7 +32,7 @@ Generation нь final citation URL болон source metadata-г зохиохг�
 
 Эдгээрийг дараагийн [[Grounded answer and citations]] component шийдвэрлэнэ.
 
-**Status: DESIGN COMPLETE — IMPLEMENTATION ALIGNMENT / VALIDATION PENDING**
+**Status: DESIGN COMPLETE — IMPLEMENTATION PARTIAL; SEMANTIC QUALITY VALIDATION PENDING**
 
 ---
 
@@ -504,17 +504,17 @@ Responsibilities:
 | Optional advice | Design Complete |
 | Claim-level evidence mapping | Design Complete |
 | AnswerDraft conceptual contract | Design Complete |
-| Existing code parity assessment | Pending |
-| Implementation alignment | Pending |
-| Regression verification | Pending |
+| Existing code parity assessment | Partial; AnswerDraft is integrated, semantic parity remains unverified |
+| Implementation alignment | Partial; pipeline passes final facts/assessment/decision to the one Generation call |
+| Regression verification | Offline suite and bounded live smoke verified; human quality review pending |
 
-**DESIGN COMPLETE — IMPLEMENTATION ALIGNMENT / VALIDATION PENDING**
+**DESIGN COMPLETE — IMPLEMENTATION PARTIAL / SEMANTIC VALIDATION PENDING**
 
 ### Existing Python Behavior
 
-Одоогийн `rag/generation.py::generate_answer()` нь `question`, `passages`, `evidence_status`, `missing_information` авч нэг structured LLM call хийнэ. `_GeneratedAnswer` schema нь `answer`, source-level `citations`, `status` талбартай; status нь `answered / partially_answered / insufficient`. Citation source ID-г `D1`, `D2`, ... байдлаар үүсгэж, зөвхөн оролтод байсан эх сурвалжийн metadata-г буцаана.
+`rag/generation.py::generate_answer()` нь Router-ийн resolved question, Planner facts, final EvidenceAssessment/Decision болон selected passage-уудыг нэг structured LLM call-д өгч `AnswerDraft` буцаана. Хоосон selected evidence үед Generation LLM call хийхгүй, `insufficient` draft үүсгэнэ. Output schema нь `request_id`, `outcome`, typed blocks, fact/evidence references, unresolved facts, limitation, optional advice агуулна.
 
-Энэ нь дээрх conceptual `AnswerDraft`-тай ижил contract биш: одоогийн output-д `blocks`, block `type/items`, per-item `fact_id/evidence_ids`, `unresolved_fact_ids`, `limitation`, `advice` талбарууд байхгүй. Conceptual outcome `partial` нь одоогийн `partially_answered`-тай нэршлийн зөрүүтэй. Pipeline нь required facts болон final `EvidenceAssessment`-ийг `generate_answer()` руу шууд дамжуулдаггүй. Иймээс design-ийн эдгээр хэсгийн implementation alignment pending; шинэ contract хэрэгжсэн гэж үзэхгүй.
+Generation өөрөө final citation metadata шийдэхгүй. `rag/answer_output.py::ground_answer()` Python-д AnswerDraft-ийг баталгаажуулж, trusted passage metadata-аас хэрэглэгчид харагдах citations render хийнэ. `answer_question()`-ийн public signature болон дээд түвшний `answer/citations/status` result хадгалагдсан; citation record-д `label` ба `passage_id` нэмэгдсэн.
 
 ---
 
@@ -529,3 +529,16 @@ Responsibilities:
 Generation нь final evidence-ийг хэрэглэгчид ойлгомжтой structured answer болгон хувиргах responsibility-тэй.
 
 Final grounding validation болон citations-ийг дараагийн component хариуцна.
+
+## Implementation status (as built)
+
+- Status: partial — pipeline-integrated, offline-verified, and smoke-tested live; semantic answer quality remains unverified.
+- Last checked: 2026-11-16.
+- Code owners: `rag/generation.py::generate_answer`; handoff `rag/pipeline.py::_process_request`; rendering `rag/answer_output.py::ground_answer`.
+- Input/handoff: `_process_request()` passes the resolved question, validated Planner facts, final post-retry EvidenceAssessment/Decision, and only selected passages. Restricted requests exit before Generation.
+- Behavior verified: one structured Generation call when selected evidence is present; no Generation LLM call for an empty selected-evidence set. The model returns `P<n>` references only; Python validates request/fact/passage relationships and resolves labels/metadata from selected passages.
+- Call bound: at most one Generation call per allowed retrieval request with selected evidence, zero with no selected evidence; no added Grounding LLM or Vector Store call. The Router currently allows up to three requests per user message.
+- Live smoke: C05 completed as `answered`; one supported fact produced one draft block and five evidence references; the final result had five sequential citation labels with passage/file/name metadata, one Generation call, and no retry. This verifies runtime handoff and citation resolution, not whether each cited passage semantically supports the claim. C01 ended `insufficient` with no Generation LLM call after the final assessment marked its fact missing. C21 ended `partially_answered` with zero draft references/citations; its earlier trace did not capture Reviewer status because the runner used an obsolete field name.
+- Tests: `.venv312\Scripts\python.exe -m unittest discover -s tests -q` — 130 passed. `.venv312\Scripts\python.exe -m compileall -q rag ui evaluation` and `git diff --check` passed. Offline tests include AnswerDraft validation, citation metadata, multi-request numbering, invalid references, and UI rendering.
+- Limitations: semantic truth, evidence relevance, citation appropriateness, and natural Mongolian quality were not human-reviewed. Provider metadata contains file ID/name only; no page, section, or verified URL is fabricated. Invalid/conflicting drafts fail closed. Live C01 had earlier attempts where Generation's `insufficient` draft conflicted with the renderer's stricter outcome rule; the rule was corrected and the final C01 run returned `insufficient` cleanly. A separate Reviewer schema/processing error also occurred on one C01 attempt; no Generation output was produced in that run.
+- Next: manually review C05's generated claims and cited passages against their source documents, then run the end-to-end parity phase; do not infer evaluation quality from these smoke cases.

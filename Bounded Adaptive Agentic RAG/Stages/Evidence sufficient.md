@@ -6,8 +6,8 @@ tags:
   - evidence
   - decision
 status: design-complete
-implementation: pending
-validation: pending
+implementation: partial
+validation: partial
 ---
 
 # Evidence sufficient
@@ -31,7 +31,7 @@ validation: pending
 
 Output нь boolean шийдвэрээс гадна дараагийн component-д шаардлагатай reference мэдээллийг агуулна.
 
-**Status: DESIGN COMPLETE — IMPLEMENTATION / VALIDATION PENDING**
+**Status: DESIGN COMPLETE — IMPLEMENTATION PARTIAL; OFFLINE VALIDATION RECORDED BELOW**
 
 ---
 
@@ -115,7 +115,7 @@ flowchart TD
 }
 ```
 
-Энэ бол conceptual contract, одоогийн Python implementation-ийн яг output биш.
+Одоогийн `review_evidence()` assessment болон Planner proposal-ийн validated fact map-ийг `decide_evidence_sufficiency()` тулгаж шалгана. Reviewer-ийн хуучин нийлбэр `status` талбар ашиглагдахгүй.
 
 ### Input Requirements
 
@@ -144,6 +144,7 @@ Invalid assessment-ийг `sufficient = false` гэж автоматаар та�
 3. Бүх expected fact ID assessment-д байх.
 4. Хариултад нөлөөлөх unresolved conflict байхгүй байх.
 5. Review execution амжилттай байх.
+6. Retrieval амжилттай дууссан байх (`success` эсвэл `empty`); `partial_error` биш байх.
 
 Эдгээр нөхцөл бүгд хангагдвал:
 
@@ -157,6 +158,8 @@ Invalid assessment-ийг `sufficient = false` гэж автоматаар та�
 - Required fact `missing`.
 - Хариултад нөлөөлөх unresolved conflict.
 - Required fact бүрийг батлах evidence хангалтгүй.
+- Review бүрэн дуусаагүй байх.
+- Retrieval-ийн нэг буюу хэд хэдэн query алдаатай (`partial_error`) байх.
 
 Үр дүн:
 
@@ -266,19 +269,21 @@ Retry боломжтой эсэхийг дараагийн component шийдн�
 
 ## 8. Decision Reasons
 
-Дараах reason codes нь V1-д ашиглаж болох conceptual утгууд.
+`reason_codes` нь assessment-ийн баталгаажсан талбаруудаас deterministic гарна.
 
 | Reason Code | Meaning |
 |---|---|
 | `partial_support` | Зарим required fact бүрэн батлагдаагүй |
 | `missing_support` | Нэг буюу хэд хэдэн required fact-д support байхгүй |
 | `unresolved_conflict` | Evidence хоорондын нөлөө бүхий зөрчил шийдэгдээгүй |
+| `review_incomplete` | Assessment review бүрэн дуусаагүй |
+| `retrieval_incomplete` | `partial_error`: зарим query амжилтгүй; энэ нь corpus-д баримт байхгүй гэсэн үг биш |
 
 Олон шалтгаан зэрэг байж болох тул `reason_codes` массив ашиглаж болно.
 
 Энэ нь шинэ semantic classification биш.
 
-Reason нь EvidenceAssessment-ийн structured fields-ээс deterministic байдлаар гарна.
+Reason нь EvidenceAssessment-ийн structured fields-ээс гарна. `partial_error` үед бүх facts supported байсан ч `sufficient=false`, `retrieval_incomplete` байна.
 
 ---
 
@@ -355,7 +360,7 @@ R3 Retrieval шатанд ороогүй учраас EvidenceDecision үүсг�
 | Partial retrieval limitation | Limitation metadata preserved |
 | No LLM evidence review result due to failure | Processing error, not ordinary No |
 
-Implementation болон regression validation pending.
+Implementation болон regression evidence-г доорх “Implementation status (as built)” хэсэгт тэмдэглэв.
 
 ---
 
@@ -403,21 +408,16 @@ Implementation болон regression validation pending.
 
 ---
 
-## 14. Current Status
+## Implementation status (as built)
 
-| Area | Status |
-|---|---|
-| Component responsibility | Design Complete |
-| Input contract | Design Complete |
-| Yes/No decision rules | Design Complete |
-| EvidenceDecision contract | Design Complete |
-| Validation/error distinction | Design Complete |
-| Multi-intent behavior | Design Complete |
-| Python implementation | Pending |
-| Unit/regression tests | Pending |
-| Runtime verification | Pending |
+- `rag/pipeline.py::decide_evidence_sufficiency()` нь Planner-ийн `request_id`/`required_facts`-ийг validated per-fact assessment, passage IDs, conflict references-тэй тулгаж `EvidenceDecision` гаргана. Request тус бүрийг тусад нь шийднэ.
+- Pipeline Yes-г generation-д, No-г зөвхөн unresolved `partial`/`missing` fact-тай Planner need-д чиглэсэн нэг retry-д шилжүүлнэ. Retry query-г Python үүсгэнэ; Reviewer-ийн `retry_query` үүнийг удирдахгүй. Шинэ unique passage ирвэл combined evidence-г нэг удаа review хийгээд decision-г нэг удаа дахин гаргана; shared budget болон нэг retry-ийн bound хэвээр.
+- Reviewer-ийн output дээр нийлбэр `sufficient/partial/insufficient` `status` байхгүй; Reviewer зөвхөн assessment болон retry handoff өгнө. Decision нь 0 LLM, 0 retrieval call.
+- `partial_error` бол бүх fact supported байсан ч No бөгөөд `retrieval_incomplete` reason хадгална. Энэ нь corpus-д мэдээлэл байхгүйг илэрхийлэхгүй.
+- **Verified:** `.venv312\Scripts\python.exe -m unittest tests.test_pipeline tests.test_generation.ReviewEvidenceTests` — 47 passed. `python -m unittest discover -s tests` — 114 tests, 109 passed, 5 assertion failures, no errors. Failures match the previous 110-test run: two Generation assertions and three UI assertions. `compileall` passed; `git diff --check` reported only repository line-ending warnings.
+- **Limits:** live Reviewer/Decision smoke болон semantic source review хийгдээгүй. Targeted retry fact/need-д одоо детерминистээр холбогдсон боловч query-ийн semantic чанар live-ээр баталгаажаагүй. `generate_answer()`-ийн partial status deterministic баталгаажуулалт энэ phase-ийн scope биш.
 
-**DESIGN COMPLETE — IMPLEMENTATION / VALIDATION PENDING**
+**PARTIAL — DETERMINISTIC DECISION AND PIPELINE HANDOFF OFFLINE VERIFIED; SEMANTIC VALIDATION PENDING**
 
 ---
 

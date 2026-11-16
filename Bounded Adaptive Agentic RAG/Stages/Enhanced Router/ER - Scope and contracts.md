@@ -110,10 +110,11 @@ Planner Router-ийн semantic classification-ийг дахин эхнээс н�
 | `classify_intent()` нэг structured call-аар relationship, intent, decomposition, query болон per-request `related_turn_ids` гаргана | Бүрэн `RequestContext` болон өргөтгөсөн `RouterResult` class |
 | Relationship: `new / follow_up / clarification`; usable history/valid ID байхгүй follow-up clarification болно | `relation_detail`, session ownership/time authorization |
 | Policy/route нь validated intent + restriction registry-гээс Python-д гарна; pipeline тэдгээрийг дахин тооцож enforcement хийнэ. ID supplied-history allowlist-аар шалгана | Candidate search/ranking ба session identity-тэй validation |
-| Нэг мессежид 3 хүртэл request; илүү request бол safe clarification | Capability plan-ийг [[Agent Planner]], strategy болон executable query-г [[Select search strategy]] хариуцах boundary |
+| Нэг мессежид 3 хүртэл агуулгын request; холимог мессежийн нэг greeting-ийг эхний preamble болгон тусгаарлана. 3-аас олон агуулгын request бол safe clarification | Capability plan-ийг [[Agent Planner]], strategy болон executable query-г [[Select search strategy]] хариуцах boundary |
 
 - Status: partial
 - Evidence: `tests.test_routing` (7 passed), 15 focused `AnswerQuestionTests` passed, offline mocks, 2026-11-16. Broader pipeline class: 33 run, 11 stale assertion/fixture failures.
+- Latest verification: offline greeting + three substantive requests regression and full test suite (132 passed), 2026-11-16.
 - Limits: semantic normalization/intent/reference accuracy source-verified label эсвэл live run-аар батлагдаагүй. Supplied-history allowlist нь cross-session identity батлахгүй; raw previous passages request-scoped provenance-гүй.
 - Deviation: одоогийн runtime `policy`/`route`-ийг LLM output-оос авахгүй; validated intent-ээс Python гаргаж байна. LLM route/policy санал security boundary биш.
 

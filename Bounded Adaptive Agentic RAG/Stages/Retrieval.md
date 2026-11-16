@@ -4,9 +4,9 @@ tags:
   - agentic-rag
   - architecture
   - retrieval
-status: design-complete
-implementation: pending
-validation: pending
+status: design-complete-implementation-partial
+implementation: partial
+validation: live-smoke-verified
 ---
 
 # Retrieval
@@ -21,7 +21,7 @@ Retrieval нь [[Select search strategy]] component-оос ирсэн `SearchPla
 
 Retrieval нь баримтын хариултыг мэдэх эсвэл evidence хангалттай эсэхийг шийдэхгүй. Зөвхөн хайлтын үр дүнг цуглуулж, стандартчилан дараагийн component-д дамжуулна.
 
-**Status: DESIGN COMPLETE — IMPLEMENTATION / VALIDATION PENDING**
+**Status: DESIGN COMPLETE — STANDALONE IMPLEMENTATION PARTIAL; OFFLINE VERIFIED; PROVIDER RUNTIME PENDING**
 
 ---
 
@@ -485,9 +485,9 @@ Future stepwise retrieval эхний result-ээс дараагийн query-г �
 | RetrievedPassages output contract | Design Complete |
 | Error/status model | Design Complete |
 | Responsibility boundaries | Design Complete |
-| Python implementation alignment | Pending |
-| OpenAI API runtime validation | Pending |
-| Regression verification | Pending |
+| Python implementation alignment | Partial — SearchPlan executor is integrated into `answer_question()` and offline-verified |
+| OpenAI API runtime validation | Live smoke passed for one-query plans; broader runtime validation pending |
+| Regression verification | Focused offline integration passed; C01/C21 live pipeline smoke passed; broader suite has unrelated Generation/UI failures |
 
 **DESIGN COMPLETE ≠ IMPLEMENTATION COMPLETE**
 
@@ -495,11 +495,25 @@ Future stepwise retrieval эхний result-ээс дараагийн query-г �
 
 Одоогийн кодыг өөрчлөлгүйгээр бүх proposed field, status хэрэгжсэн гэж үзэхгүй.
 
-Одоогийн `refactor` implementation-ийн `search_documents(query, limit=5)` нь нэг query-г OpenAI Vector Store-д ажиллуулдаг. Agent Planner/Strategy Selector-оос ирсэн `SearchPlan`-ийг нэг request-д batch-аар гүйцэтгэх V1 orchestration одоогоор implemented биш; энэ note-ийн `multi_query`, per-query status болон нийлмэл `RetrievedPassages` contract-ийг runtime/API verification-оор баталгаажуулаагүй.
+`search_documents(query, limit=5)` нь нэг query-г OpenAI Vector Store-д ажиллуулдаг provider wrapper хэвээр. `answer_question()` validated SearchPlan-уудыг `execute_search_plan()`-д дамжуулж, plan query бүрийн text/limit болон query/fact association-г хадгална. Дараа нь existing evidence review/retry/generation үргэлжилнэ.
+
+## Implementation status (as built)
+
+- Status: partial (pipeline integrated; offline and live-smoke verified)
+- Last checked: 2026-11-16
+- Git revision: `main` @ `6525984` (live smoke ran against the dirty working tree)
+- Code owner: `rag/retrieval.py::execute_search_plan`, `rag/retrieval.py::search_documents`
+- Behavior verified: The executor validates the request/strategy, exact one- or two-query count, ordered query IDs, non-empty unique query text, fact-target IDs, and `limit_per_query` before provider calls. It executes sequentially, passes the plan limit, retains source metadata plus query/fact associations, and returns `success`, `empty`, `partial_error`, or `error` with per-query status. A failed query does not discard successful query results and is not retried. The pipeline invokes it for Selector plans and stops review/generation on retrieval errors while preserving successful passages/status.
+- Query source: Selector uses the Router's validated normalized `search_query`; if missing or blank, it falls back to `resolved_question`. `execute_search_plan()` itself executes only the plan text and does not normalize it.
+- Tests executed: `tests.test_retrieval` — 10 offline tests; focused pipeline/AP/SSS/QH/ER suite — 86 passed. C01/C21 integrated smoke ran before normalized-query mapping was added; for both Router `search_query == resolved_question`. C07 ran after the mapping and verified that the distinct normalized Router query reached initial Retrieval unchanged. All three selected `single_query`, returned 5/5/4 initial passages with associations, then ran one retry and ended `partially_answered`; source/claim quality was not reviewed. See the ignored `evaluation/runs/live-smoke-2026-11-16-qh-to-retrieval-*.json` traces and Playbook.
+- Budget: `answer_question()` derives a same-message ceiling of `3 × allowed proposal count` (at most two planned queries plus one retry per request). Selector allocates the initial budget across proposals; one pipeline counter is consumed before every planned or retry provider call. This is not a fixed four-call cap or cross-message controller.
+- Limitations: Only `single_query` was exercised live; multi-query has offline integration tests. The returned passages and generated answer were not reviewed for relevance, groundedness, or citation validity. Existing `search_documents` exact-deduplicates within each query; this executor preserves duplicates across queries and does not change that wrapper behavior.
+- Architecture deviations: The existing provider wrapper performs within-query exact deduplication before the executor can return passages; retained under this phase's requirement to preserve `search_documents` behavior.
+- Next implementation step: Complete the separate Dedup and Evidence Review contract for per-fact support and retrieval-status handoff; then review live answers/citations against authoritative documents.
 
 ---
 
-## 16. Related Components
+## 17. Related Components
 
 - [[Select search strategy]]
 - [[Retrieval capabilities]]

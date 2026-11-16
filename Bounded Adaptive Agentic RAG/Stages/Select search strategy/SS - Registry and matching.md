@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # SS - Registry and matching
 
@@ -51,7 +51,7 @@ flowchart TD
 
 ## Input — `PlanningProposal`
 
-Input нь [[Agent Planner]]-аас ирсэн validated `PlanningProposal`; нэг independent allowed retrieval request-д нэг proposal байна.
+Input нь [[Agent Planner]]-аас ирсэн validated `PlanningProposal`; нэг independent allowed retrieval request-д нэг proposal байна. Тухайн request-ийн `resolved_question` болон байвал normalized `search_query` нь Selector-д Python mapping-аар хамт очно.
 
 ```json
 {
@@ -133,6 +133,14 @@ Priority: **required capability → provider/backend compatibility → budget �
 | Олон өнцөгтэй асуулт | `multi_angle_coverage` preferred, 2 call available | `multi_query` | Preferred capability-г хангана |
 | Budget хязгаар | Multi-angle preferred, 1 call available | `single_query` + limitation trace | Required хангана; preferred дутуу |
 | Дэмжигдээгүй requirement | Required `dependency_aware_search`; registry-д хоёр V1 strategy л байна | `planning_limitation` | Required capability-г худал хангахгүй |
+
+## Implementation status (as built)
+
+- Status: partial. `rag/selection.py::select_search_plans` нь plain Python registry ашиглан зөвхөн `single_query` ба `multi_query` сонгоно.
+- `single_query` нь `focused_lookup`-г 1 operation-оор; `multi_query` нь `focused_lookup` + `multi_angle_coverage`-г 2 operation-оор хангана. Required capability-г бүхэлд нь хангах strategy байхгүй бол limitation буцаана.
+- Required-д хангалттай хамгийн бага operation-той strategy эхэлж сонгогдоно; үлдсэн budget байвал preferred multi-angle-ийг request дарааллаар upgrade хийнэ. Бусад catalog capability implementation байхгүй.
+- Verification: 86-test focused offline suite нь Selector contract болон pipeline handoff-ийг шалгасан. C01/C07/C21 live integrated smoke-д Registry нэг `single_query` plan үүсгэж Retrieval executor ажиллуулсан; Selector өөрөө provider эсвэл retrieval дуудахгүй хэвээр.
+- Limits: Registry dynamic enable/provider availability шалгахгүй; одоогоор зөвхөн OpenAI Vector Store хэрэглэдэг current code-д зориулсан. Multi-query runtime болон semantic relevance live батлагдаагүй.
 
 ## Navigation
 

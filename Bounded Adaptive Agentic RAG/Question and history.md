@@ -121,10 +121,10 @@ flowchart TD
 
 - Status: partial
 - Last checked: 2026-11-16
-- Git revision: `main` @ `7af80a9` (status-note updates uncommitted)
+- Git revision: `main` @ `6525984` (live smoke ran against the dirty working tree)
 - Code owners: `ui/streamlit_ui.py::_ensure_turn_ids`, `rag/routing.py::prepare_history`, `rag/routing.py::build_router_history_context`, `rag/pipeline.py::answer_question`
 - Behavior verified: non-string and empty input stop before Router; original question is passed unchanged. UI stores one UUID turn ID on each user/assistant pair and passes full session history. QH prepares up to six detailed messages and up to eight older user-question summaries, each capped at 240 characters. Legacy callers without IDs receive request-local IDs for validation.
-- Tests executed in this phase: 7 routing, 15 focused pipeline, and 1 Streamlit history test passed offline; see `RAG_Implementation_Playbook.md`.
+- Tests executed: the focused pipeline/AP/SSS/QH/ER suite — 86 passed offline; the focused UI history test remains from the prior verified run. Live integrated smoke: C01 valid input and C21 with one history message both passed through `answer_question`; C21 produced `workplace/follow_up` and reached Planner/Selector/Retrieval. C07 Latin input also reached integrated retrieval using Router's normalized query. These cases verify flow only, not semantic answer quality. See Playbook and ignored live traces.
 - Limitations: no maximum-length check, NFC/text preparation, or explicit persisted session ID. Candidate discovery is a chronological bounded catalogue, not semantic search; older turns outside the eight-candidate window cannot be selected. UI still stores raw passages rather than reviewed evidence.
 - Architecture deviations: no `RequestContext` class or new dependency; plain Python values are used at the existing boundary.
 - Next implementation step: improve evidence provenance and verify semantic relationship/normalization quality; do not treat candidate plumbing as semantic-quality proof.

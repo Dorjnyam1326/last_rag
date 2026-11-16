@@ -13,7 +13,7 @@ scope: refactor-only
 # RAG - Evaluation and optimization
 
 > [!important] Scope
-> Энэ бол **`refactor` standalone RAG** төслийн measurement/evaluation workflow. `RAG Admin`-ийг өөрчлөхгүй. Шинэ benchmark, provider, ingestion pipeline, evaluation framework шууд нэвтрүүлэхгүй. Одоогийн 10 асуултын regression set болон өмнөх LangChain pipeline-ийн ажиллаж байсан behavior-ийг эхний reference болгоно.
+> Энэ бол **`refactor` standalone RAG** төслийн measurement/evaluation workflow. `RAG Admin`-ийг өөрчлөхгүй. Шинэ benchmark, provider, ingestion pipeline, evaluation framework шууд нэвтрүүлэхгүй. Одоогийн `refactor/evaluation/cases.json` дахь 30 frozen кейс болон `Langchain/evaluation/questions.json` дахь 40 intent-labeled асуултыг тус тусын хязгаартай reference болгон ашиглана. 40 асуултын fixture нь answer ground truth биш.
 
 ## 1. Зорилго
 
@@ -46,7 +46,7 @@ flowchart TD
 
 | Input | Processing | Output |
 |---|---|---|
-| Existing 10-question set, document/store versions, current and old behavior | Stage trace + answer review + paired comparison | Evaluation report, failure attribution, accept/revert decision |
+| Refactor-ийн 30 frozen case эсвэл external Langchain-ийн 40 intent-labeled асуулт; document/store versions | Stage trace + answer review + paired comparison | Execution report, failure attribution, answer quality зөвхөн source/human review-оор баталгаажна |
 
 ## 3. Evaluation хаана хийгдэх вэ?
 
@@ -69,7 +69,7 @@ Vault болон repository тусдаа бол agent-д **хоёуланд нь
 
 ## 4. Эхний regression set — зөвхөн байгаа өгөгдөл
 
-Одоогийн **10 existing question**-ийг reference set болгон reuse хийнэ. Тэдгээрийг шинэ project-ийн шинэ benchmark болгож тэлэхгүй.
+Repository-д 30 frozen evaluation case (`24` development, `6` holdout) байна. Хуучин Langchain project-д 40 асуултын `evaluation/questions.json` байна (`10` хэл тус бүрт; `8` follow-up). Эдгээрийг нэг schema, нэг ground truth гэж үзэж болохгүй: refactor-ийн 30 кейс routing/restriction label-тай; 40 асуулт intent-description label-тай боловч source-verified answers-гүй. 40 асуултыг refactor дээр session history-тай ажиллуулж болно, гэхдээ semantic answer accuracy-ийн оноо гэж үзэхгүй.
 
 Case бүрд байгаа metadata-г шалгаж шаардлагатай минимумыг тэмдэглэ:
 - `case_id` / original question / language form (Cyrillic, Latin, English, mixed),
@@ -81,7 +81,7 @@ Case бүрд байгаа metadata-г шалгаж шаардлагатай м�
 
 **Expected answer зохиохгүй.** Ground truth байхгүй бол `needs_human_review` гэж тэмдэглэ. Зарим case-ийн хувьд өмнөх сайн хариулт нь behavior reference болохоос өөрөө заавал ground truth биш.
 
-Coverage шалгах үед case-үүдэд боломжтой бол дараах шинжүүд байгаа эсэхийг тэмдэглэ: simple fact, procedure, multi-part, mixed-language, restricted, follow-up, partial/no-evidence, citation. Байгаа 10 case-д байхгүй category-г шууд том dataset болгон өргөжүүлэхгүй; coverage gap гэж тэмдэглэ.
+Coverage шалгах үед case-үүдэд боломжтой бол дараах шинжүүд байгаа эсэхийг тэмдэглэ: simple fact, procedure, multi-part, mixed-language, restricted, follow-up, partial/no-evidence, citation. Одоо байгаа fixture-д байхгүй category-г ground truth зохиож нөхөхгүй; coverage gap гэж тэмдэглэ.
 
 ## 5. Reproducible run бүрийн metadata
 
@@ -258,17 +258,23 @@ Missing measurements = `N/A`, not zero. Хүснэгт нь тайлангийн
 
 ### Latest baseline
 
-- Status: **Not yet captured for this V1 architecture**.
-- Run ID: —
-- Git revision: —
-- Cases: existing 10-question regression set (verify location and actual count).
-- Verified quality: —
-- Per-stage latency/tokens: —
+- Status: **V1 answer-quality baseline not established**. An execution-only live run is recorded below; it is not a quality comparison.
+- Run ID: `questions-40-7041af77b9d4` (2026-11-16).
+- Git revision: `6525984438337dca0e5bd3d505da919cc73662bb`; working tree was dirty.
+- Cases: 40 external rows from `Langchain/evaluation/questions.json`; 10 each in Cyrillic Mongolian, Latin Mongolian, English, and mixed language; 8 follow-ups. Dataset labels intent descriptions only, with no source-verified answer labels.
+- Runtime: `gpt-6-luna`; Vector Store snapshot and prompt hash were not recorded.
+- Flow checks: 40/40 request counts; 32/32 independent turns routed as `new`, 8/8 follow-ups as `follow_up`; all 8 follow-ups received the prior live answer in history. Search-action 40/40 is based on the assumption that these policy questions should retrieve documents. Descriptive `expected_intents` were not mapped to Router labels; semantic intent accuracy is not measured.
+- Final statuses: 15 `answered`, 4 `partially_answered`, 10 `insufficient`, 11 `error`. Of the errors, 9 were rejected at Grounding & citations, 1 Evidence Review failed, and 1 Generation API call failed. These statuses are execution outcomes, not correctness labels.
+- Calls: 40 Router, 40 Planner, 69 Reviewer, 32 Generation, and 71 Vector Store searches. Usage was available for 180/181 model calls (483,823 input and 48,626 output tokens). Runner-estimated spend upper bound: `$0.311955`; one missing usage record was costed at its conservative reserve, so this is not an invoice amount.
+- Median latency: 19.761 s per question; Router 2.364 s, Planner 3.223 s, Reviewer 4.176 s, Retrieval 1.502 s, Generation 3.593 s.
+- Artifacts: ignored local files `evaluation/runs/questions_live_results.json` and `evaluation/runs/questions_human_review.csv` (40 review rows). No source/claim/citation human review has been completed.
+- Verified quality: **pending**. Do not treat this run as proof of answer accuracy or compare it as a quality winner against Langchain until corpus versions and source-grounded reviews are aligned.
 
 ### Decisions
 
 - V1 design first, implementation second, measurement third, then evidence-driven optimization.
 - No optimization accepted solely on lower latency/tokens if grounding, restrictions or citations regress.
+- The 2026-11-16 40-question run verifies execution and follow-up handoff only; its intent-only labels and unrecorded Vector Store snapshot prevent answer-quality or old-vs-new claims.
 - Do not alter RAG Admin.
 
 ## 13. Acceptance checklist

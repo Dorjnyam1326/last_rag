@@ -65,14 +65,14 @@ flowchart TD
 
 ## Current vs proposed
 
-`rag/planning.py` capability ID-уудыг structured proposal vocabulary болгон ашиглаж, шаардлагатай/preferred жагсаалтыг validate хийнэ. Эдгээр capability нь enabled strategy байгаа гэсэн үг биш; runtime Strategy Registry/Selector байхгүй хэвээр. Pipeline одоогоор router-ийн `search_query`-г шууд ашигладаг тул Planner callable integration pending.
+`rag/planning.py` capability ID-уудыг structured proposal vocabulary болгон ашиглаж, шаардлагатай/preferred жагсаалтыг validate хийнэ. Capability нь enabled strategy байгаа гэсэн үг биш; `rag/selection.py` дахь V1 Registry л `focused_lookup` болон `multi_angle_coverage`-ийг дэмждэг. `answer_question()` Planner proposal-уудыг Selector-д дамжуулна.
 
 ## Implementation status (as built)
 
 - Status: partial. `CAPABILITY_DESCRIPTIONS` нь note-ийн зургаан capability ID-г canonical Planner vocabulary болгон өгч, structured output болон Python validation-д ашиглана.
 - Model capability ID-г зөвхөн catalog-аас сонгоно. Python unknown/duplicate болон нэгэн зэрэг required/preferred болсон ID-г reject хийнэ.
-- Limits: capability proposal нь capability availability батлахгүй; Strategy Registry болон capability matching хэрэгжээгүй. `dependency_aware_search`, `metadata_scoping` зэрэг proposal-д Selector бодит боломжийг цааш шалгах ёстой. Live smoke нь сонгосон capability-г registry/provider дээр ажиллаж байгааг нотлоогүй.
-- Verification: `tests.test_planning` 6 passed offline; 2026-11-16 live smoke-д хоёр proposal-ын capability ID-ууд catalog-д таарч, validation давсан.
+- Limits: `dependency_aware_search`, `metadata_scoping` зэрэг supported strategy-гүй required capability нь хайлтыг эхлүүлэхгүй, explicit planning limitation болно. C01/C07/C21 live smoke зөвхөн `focused_lookup`-ийг шалгасан; multi-angle live quality батлагдаагүй.
+- Verification: `tests.test_planning` болон `tests.test_selection` focused suite-д pipeline integration-ийг оруулсан 86 test pass; 2026-11-16 integrated C01/C07/C21 live smoke-д Planner-ийн capability proposal Selector/Retrieval хүртэл дамжсан.
 
 ## Navigation
 

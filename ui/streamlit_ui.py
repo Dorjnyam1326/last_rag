@@ -16,7 +16,34 @@ def _render_citations(citations: list[dict]) -> None:
             request = (
                 f" · {citation['request_id']}" if citation.get("request_id") else ""
             )
-            st.caption(f"{citation['source_id']}{request} · {citation['filename']}")
+            label = citation.get("label")
+            source = f"[{label}]" if isinstance(label, str) and label else citation["source_id"]
+            st.caption(f"{source}{request} · {citation['filename']}")
+
+
+def _render_process_trace(process_trace: list[dict] | None) -> None:
+    if not isinstance(process_trace, list) or not process_trace:
+        return
+
+    status_labels = {
+        "completed": "дууссан",
+        "partial": "хэсэгчилсэн",
+        "skipped": "алгассан",
+        "failed": "алдаатай",
+    }
+    with st.expander("Боловсруулалтын явц", expanded=False):
+        for index, event in enumerate(process_trace, start=1):
+            if not isinstance(event, dict):
+                continue
+            stage = event.get("stage", "Тодорхойгүй шат")
+            request_id = event.get("request_id")
+            request_label = f" · {request_id}" if request_id else ""
+            status = status_labels.get(event.get("status"), event.get("status", ""))
+            st.markdown(f"**{index}. {stage}{request_label} · {status}**")
+            if event.get("summary"):
+                st.caption(event["summary"])
+            if event.get("details") is not None:
+                st.json(event["details"], expanded=False)
 
 
 def _ensure_turn_ids(history: list[dict]) -> None:
@@ -62,6 +89,8 @@ def _render_single_result(result: dict) -> None:
 
 
 def _render_result(result: dict) -> None:
+    if result.get("greeting"):
+        st.write(result["greeting"])
     if result.get("results"):
         for item in result["results"]:
             with st.container(border=True):
@@ -69,6 +98,7 @@ def _render_result(result: dict) -> None:
                 _render_single_result(item)
     else:
         _render_single_result(result)
+    _render_process_trace(result.get("process_trace"))
 
 
 def render_app() -> None:
@@ -129,6 +159,8 @@ def render_app() -> None:
                     "citations": message.get("citations", []),
                     "status": message.get("status", "answered"),
                     "passages": [],
+                    "process_trace": message.get("process_trace", []),
+                    "greeting": message.get("greeting"),
                 }
                 if message.get("results"):
                     previous["results"] = [
@@ -173,7 +205,10 @@ def render_app() -> None:
             "citations": result["citations"],
             "status": result["status"],
             "passages": result.get("passages", [])[:MAX_REUSABLE_PASSAGES],
+            "process_trace": result.get("process_trace", []),
         }
+        if result.get("greeting"):
+            assistant_message["greeting"] = result["greeting"]
         if result.get("results"):
             assistant_message["results"] = [
                 {**item, "passages": []} for item in result["results"]

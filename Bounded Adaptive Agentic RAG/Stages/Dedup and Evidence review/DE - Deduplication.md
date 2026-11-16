@@ -4,8 +4,8 @@ tags:
   - evidence
   - deduplication
 status: design-complete
-implementation: pending
-validation: pending
+implementation: partial
+validation: partial
 ---
 
 # DE - Deduplication
@@ -194,12 +194,19 @@ Deterministic tests:
 
 ## Current Code vs V1 Design
 
-Одоогийн `rag/retrieval.py::deduplicate_passages` нь dictionary key болгон passage-ийн raw `text`-ийг ашигладаг. Иймээс яг ижил текст өөр file-аас ирсэн ч нэг passage болж, давхардсан мөрийн `file_id`, `filename`, `score`, `origin`-г `source_provenance` жагсаалтад нэмнэ. Query ID, rank, target fact болон location metadata одоогийн функцэд байхгүй.
+`rag/retrieval.py::deduplicate_passages` нь `file_id`, ил байгаа version/location metadata, whitespace-normalized text-ийн SHA-256 fingerprint-ээр identity үүсгэнэ. Одоогийн OpenAI Vector Store adapter chunk/location/version metadata буцаахгүй тул runtime-д `file_id + text fingerprint` fallback хэрэглэгдэнэ. Ялгаатай file ID, version эсвэл location-тай ижил text тусдаа үлдэнэ.
 
-Тиймээс одоогийн behavior нь энэ note-д заасан V1 identity contract-той бүрэн нийцэхгүй: file/version ялгааг тусад нь хадгалахгүй, `file_id + passage fingerprint` fallback хэрэгжээгүй. Энд тайлбарласан алгоритм нь proposed design бөгөөд implementation pending.
+Давхардсан occurrence-уудын `retrieval_matches` (`query_id`, rank, score, fact targets)-г нэгтгэж, source attribute-уудыг `source_provenance`-д хадгална. Хариултад ашиглах passage ID-г pipeline deduplication-ийн дараа тогтвортой `P1...` дарааллаар онооно. Location metadata байхгүй үед ижил file дотор ижил text өөр байрлалд давтагдсаныг ялгах боломжгүй хэвээр.
 
 ## Status
 
-**DESIGN COMPLETE — IMPLEMENTATION PENDING**
+## Implementation status (as built)
+
+- Deterministic exact deduplication болон whitespace fingerprint хэрэглэнэ; эх text өөрчлөхгүй, semantic similarity-аар нэгтгэхгүй.
+- Ижил passage олон SearchPlan query-ээс ирэхэд бүх query/rank/score/target холбоосыг хадгална. Өөр file, version, мэдэгдэж буй location болон file ID-гүй passage-ийг нэгтгэж устгахгүй.
+- **Verified:** `tests.test_retrieval` болон pipeline integration tests; focused DE/QH/ER/AP/SSS/Retrieval suite: 88 passed.
+- **Limit:** одоогийн Vector Store adapter location/version metadata гаргахгүй. File дотор ижил text-ийн өөр occurrence-ийг ялгахгүй байж болно; semantic dedup, reranking болон version authority шийдэхгүй.
+
+**PARTIAL — OFFLINE VERIFIED; SOURCE LOCATION METADATA LIMITED**
 
 Related: [[Dedup and Evidence review]], [[DE - Evidence review]], [[Retrieval]]

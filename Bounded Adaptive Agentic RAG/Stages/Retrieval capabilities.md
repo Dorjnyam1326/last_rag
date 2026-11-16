@@ -415,11 +415,11 @@ Strategy implementation нь information needs-ээс final query үүсгэж �
 |---|---|
 | Capability-based architecture | Design selected |
 | Capability catalog | Proposed |
-| PlanningProposal contract | Proposed |
-| Strategy Registry contract | Proposed |
-| Capability matching algorithm | Proposed |
+| PlanningProposal contract | Implemented in `rag/planning.py`; offline tests and synthetic live smoke |
+| Strategy Registry contract | Partial; V1 single/multi registry in `rag/selection.py` |
+| Capability matching algorithm | Partial; deterministic required/preferred matching in `rag/selection.py` |
 | Planner capability vocabulary and proposal validation | Implemented; offline tests and synthetic live smoke passed in `rag/planning.py` |
-| Strategy Registry and capability matching | Pending; catalog entries are not runtime availability claims |
-| Selector handoff/runtime validation | Pending |
+| Strategy Registry and capability matching | Partial; only `focused_lookup` and `multi_angle_coverage` have V1 strategies |
+| Selector handoff/runtime validation | Implemented offline as standalone; pipeline integration and global budget enforcement pending |
 
 Энэ note нь архитектурын шийдвэрүүдийг тайлбарлана. Бодит код хэрэгжсэн гэсэн баталгаа биш.

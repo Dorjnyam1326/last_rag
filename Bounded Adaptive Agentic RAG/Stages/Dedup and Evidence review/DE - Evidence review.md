@@ -5,8 +5,8 @@ tags:
   - grounding
   - review
 status: design-complete
-implementation: pending
-validation: pending
+implementation: partial
+validation: partial
 ---
 
 # DE - Evidence review
@@ -189,7 +189,7 @@ Conceptual `EvidenceAssessment`:
 }
 ```
 
-`review_status` нь conceptual application field бөгөөд одоогийн implementation-д заавал байгаа гэсэн үг биш.
+`review_status` болон `retrieval_status` нь одоогийн validated reviewer output-д байна. `sufficient` гэсэн нийлбэр шийдвэрийг Reviewer гаргахгүй; дараагийн Evidence sufficient node гаргана.
 
 ### Important
 
@@ -329,12 +329,19 @@ Evidence Reviewer does not:
 
 ## Current Code vs V1 Design
 
-Одоогийн `rag/generation.py::review_evidence` нь passages байвал нэг structured LLM call хийж `sufficient / partial / insufficient`, `relevant_ids`, `missing_information`, `retry_query` буцаадаг. Өгөгдсөн source ID-оос гадуурх `relevant_ids`-ийг Python шүүнэ. `rag/pipeline.py` эдгээр ID-г `E1`, `E2`, ... байдлаар үүсгэн reviewer-д өгдөг.
+`rag/generation.py::review_evidence` нь Planner-ийн validated required facts болон information needs, resolved question, deduplicated passages/provenance, Retrieval status-ийг нэг structured call-д хэрэглэнэ. Structured output-д required fact бүрийн `supported / partial / missing` status, `P` evidence ID, missing detail болон conflict references ирнэ.
 
-Одоогийн output нь энэ note-ийн `EvidenceAssessment` V1 schema биш: fact бүрийн status/evidence mapping, conflict references, selected evidence IDs бүхий тусдаа schema, retrieval execution status propagation одоогоор хэрэгжээгүй. Нийт passage-ийн тоог pipeline bounded retrieval болон өмнөх-turn evidence-ийн лимитээр хязгаарладаг ч reviewer-д зориулсан тусгай context-budget/truncation report байхгүй. Иймд дээрх contract нь proposed; implementation болон runtime validation pending.
+Python нь exact schema, бүх required fact ба information need бүрэн байгаа эсэх, need-to-fact targets, fact/evidence/conflict IDs, duplicate references-ийг шалгана. Reviewer `selected_evidence_ids`, `review_status`, `retrieval_status` болон retry handoff буцаана; `sufficient / partial / insufficient` нийлбэр шийдвэр Reviewer output-д байхгүй. Дараагийн `decide_evidence_sufficiency()` нь Planner fact map болон validated assessment-ийг тулгана. Empty successful retrieval нь LLM call хийхгүйгээр missing assessment буцаана. Total provider error болон usable passage-гүй partial error нь `unavailable/error`; usable passage-тай partial error-ийг үнэлж, `partial` болон retrieval limitation-ийг хадгална.
+
+## Implementation status (as built)
+
+- Нэг evidence assessment-д хамгийн ихдээ нэг structured Reviewer call; targeted retry шинэ unique passage өгвөл combined evidence-д нэг дахин review хийнэ. Нэмэлт reranker/grader нэмээгүй.
+- Reviewer per-fact assessment болон legacy `retry_query` field буцаадаг ч pipeline query construction-д уг field-ийг ашиглахгүй; query-г unresolved Planner need болон `missing_detail`-ээс deterministic Python үүсгэнэ. Reviewer хайлт хийхгүй, policy/restriction шийдэхгүй, final answer үүсгэхгүй. Pipeline нь EvidenceDecision-ийн selected references болсон passage-уудыг generation-д өгнө.
+- **Verified:** `.venv312\Scripts\python.exe -m unittest tests.test_pipeline tests.test_generation.ReviewEvidenceTests` — 47 passed. `python -m unittest discover -s tests` — 114 tests, 109 passed, the same 5 Generation/UI assertion failures seen in the previous 110-test run, no errors. These tests use mocked outputs; they do not establish semantic correctness.
+- **Limits:** live Reviewer/Decision call болон authoritative source-той human review хийгдээгүй. Тусгай token/context budget эсвэл truncation report байхгүй. `partial_error` нь decision дээр `retrieval_incomplete` шалтгаантай No боловч corpus-д баримт байхгүй гэсэн утгагүй. Existing `generate_answer()`-ийн partial-status assertion одоогийн suite-д failure хэвээр; үүнийг энэ phase-д өөрчлөөгүй.
 
 ## Status
 
-**DESIGN COMPLETE — IMPLEMENTATION / REGRESSION VALIDATION PENDING**
+**PARTIAL — STRUCTURED ASSESSMENT AND DOWNSTREAM DECISION OFFLINE VERIFIED; SEMANTIC VALIDATION PENDING**
 
 Related: [[Dedup and Evidence review]], [[DE - Deduplication]], [[Agent Planner]], [[Retrieval]]

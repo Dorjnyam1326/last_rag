@@ -1,6 +1,6 @@
 ---
 tags: [rag, architecture, migration]
-status: design-finalized-implementation-pending
+status: design-finalized-implementation-partial
 ---
 # SS - SearchPlan and validation
 
@@ -94,6 +94,14 @@ Debug болон regression validation-д дараах conceptual талбару
 | Олон allowed request ижил budget өрсөлдөх | Baseline allocation; үлдсэнийг deterministic Controller policy-оор хуваарилах | Нийт cap-ийг барих, чимээгүй алгасахгүй |
 | Strategy call count budget-ээс их | Allowed fallback эсвэл limitation | Budget exceed хийхгүй |
 | Query rewrite утга өөрчлөх эрсдэлтэй | Meaning хадгалахгүй бол plan validation failure | Тоо, negation, identifier зэргийг хамгаална |
+
+## Implementation status (as built)
+
+- Status: partial. `rag/selection.py` нь proposal shape, R1–R3 request ID, F/N ID, corresponding `resolved_question`, optional request-ID mapped Router `search_query`, capability ID, need target болон бүх fact target-д хамрагдсан эсэхийг шалгана. Pipeline нь Router query байхгүй/blank үед resolved question-ийг mapping-д өгдөг; explicit blank/missing mapping Selector дээр validation failure болно. Standalone mapping-ийг бүхэлд нь орхивол resolved question query base болно.
+- Үүсгэсэн SearchPlan нь strategy-д таарсан query count, Q ID, хоосон/давхардсан query, target coverage, Top-5 limit, allocated budget, fallback талбаруудыг validate хийсний дараа буцаана.
+- Output нь proposal бүрт `status: planned` + `search_plan`, эсвэл `status: planning_limitation` + `reason` гэсэн result envelope. Энэ нь subnote-ийн SearchPlan эсвэл limitation output-ыг batch-д нэг мөр хадгалах runtime хэлбэр.
+- Verification: focused offline suite 86 passed; pipeline-level test Selector outcome request-тэй таарч байгааг шалгана. C01/C07/C21 integrated live smoke-д validated `SearchPlan` бүр Retrieval executor-т хүрсэн.
+- Limits: Selector зөвхөн plan-ийг validate хийнэ; provider execution `execute_search_plan()` эзэмшинэ. Runtime budget consumption нь pipeline counter-т хамаарна; plan өөрөө ашигласан operation-ы гүйцэтгэлийн trace агуулахгүй.
 
 ## Navigation
 
